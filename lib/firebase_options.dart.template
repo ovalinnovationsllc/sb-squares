@@ -2,6 +2,10 @@ import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
+// IMPORTANT: This is a template file. 
+// Copy this to firebase_options.dart and replace with your actual Firebase configuration values.
+// Never commit firebase_options.dart to version control.
+
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -29,12 +33,12 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCd_bFnnta2I_JGb7pG1iskOfxUyi1a4I0',
-    appId: '1:19306580858:web:36c36a0b25c2c9ec0a24c3',
-    messagingSenderId: '19306580858',
-    projectId: 'sb-squares-2d0ac',
-    authDomain: 'sb-squares-2d0ac.firebaseapp.com',
-    storageBucket: 'sb-squares-2d0ac.firebasestorage.app',
+    apiKey: 'YOUR_WEB_API_KEY_HERE',
+    appId: 'YOUR_WEB_APP_ID_HERE',
+    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID_HERE',
+    projectId: 'YOUR_PROJECT_ID_HERE',
+    authDomain: 'YOUR_PROJECT_ID_HERE.firebaseapp.com',
+    storageBucket: 'YOUR_PROJECT_ID_HERE.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(

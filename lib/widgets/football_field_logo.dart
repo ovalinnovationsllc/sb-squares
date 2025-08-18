@@ -251,6 +251,84 @@ class FootballFieldPainter extends CustomPainter {
         hashPaint,
       );
     }
+    
+    // Draw realistic football at center of field
+    _drawFootball(canvas, centerX, fieldTop + fieldHeight / 2, scaleFactor);
+  }
+  
+  void _drawFootball(Canvas canvas, double centerX, double centerY, double scaleFactor) {
+    // Football dimensions - scaled to field
+    final footballWidth = 25.0 * scaleFactor;
+    final footballHeight = 15.0 * scaleFactor;
+    
+    // Football body - brown leather color
+    final footballPaint = Paint()
+      ..color = const Color(0xFF8B4513) // Saddle brown
+      ..style = PaintingStyle.fill;
+    
+    // Create football oval shape
+    final footballRect = Rect.fromCenter(
+      center: Offset(centerX, centerY),
+      width: footballWidth,
+      height: footballHeight,
+    );
+    
+    // Draw football body (ellipse)
+    canvas.drawOval(footballRect, footballPaint);
+    
+    // Add darker brown shading for 3D effect
+    final shadowPaint = Paint()
+      ..color = const Color(0xFF654321) // Dark brown
+      ..style = PaintingStyle.fill;
+    
+    // Bottom shadow
+    final shadowRect = Rect.fromCenter(
+      center: Offset(centerX, centerY + footballHeight * 0.15),
+      width: footballWidth * 0.9,
+      height: footballHeight * 0.4,
+    );
+    canvas.drawOval(shadowRect, shadowPaint);
+    
+    // White stitching line down the middle
+    final stitchPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 1.5 * scaleFactor
+      ..style = PaintingStyle.stroke;
+    
+    // Center line
+    canvas.drawLine(
+      Offset(centerX - footballWidth * 0.35, centerY),
+      Offset(centerX + footballWidth * 0.35, centerY),
+      stitchPaint,
+    );
+    
+    // Cross stitches
+    final stitchLength = 2.0 * scaleFactor;
+    for (int i = -2; i <= 2; i++) {
+      final x = centerX + (footballWidth * 0.15 * i);
+      canvas.drawLine(
+        Offset(x - stitchLength, centerY - stitchLength),
+        Offset(x + stitchLength, centerY + stitchLength),
+        stitchPaint,
+      );
+      canvas.drawLine(
+        Offset(x - stitchLength, centerY + stitchLength),
+        Offset(x + stitchLength, centerY - stitchLength),
+        stitchPaint,
+      );
+    }
+    
+    // Add highlight for 3D effect
+    final highlightPaint = Paint()
+      ..color = const Color(0xFFD2B48C) // Tan color
+      ..style = PaintingStyle.fill;
+    
+    final highlightRect = Rect.fromCenter(
+      center: Offset(centerX - footballWidth * 0.1, centerY - footballHeight * 0.2),
+      width: footballWidth * 0.3,
+      height: footballHeight * 0.3,
+    );
+    canvas.drawOval(highlightRect, highlightPaint);
   }
 
   @override
