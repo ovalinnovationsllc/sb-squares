@@ -1,8 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'config/security_config.dart';
+import 'models/user_model.dart';
+import 'services/user_service.dart';
+import 'pages/admin_dashboard.dart';
+import 'pages/welcome_screen.dart';
 import 'widgets/football_field_logo.dart';
 import 'widgets/super_bowl_banner.dart';
+import 'widgets/footer_widget.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -33,6 +46,14 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  final TextEditingController _emailController = TextEditingController();
+  final UserService _userService = UserService();
+  bool _isEmailValid = false;
+  String? _emailError;
+  bool _isCheckingDatabase = false;
+  bool _userExists = false;
+  UserModel? _currentUser;
+  Timer? _debounceTimer;
 
   @override
   void initState() {
@@ -41,6 +62,8 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
       duration: const Duration(seconds: 2),
       vsync: this,
     );
+    
+    _emailController.addListener(_onEmailChanged);
     
     _fadeAnimation = Tween<double>(
       begin: 0.0,
@@ -63,14 +86,104 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _controller.dispose();
+    _emailController.dispose();
     super.dispose();
+  }
+  
+  void _onEmailChanged() {
+    // Cancel the previous timer if user is still typing
+    _debounceTimer?.cancel();
+    
+    // Start a new timer that will trigger validation after 800ms of no typing
+    _debounceTimer = Timer(const Duration(milliseconds: 800), () {
+      _validateEmail();
+    });
+  }
+
+  void _validateEmail() async {
+    final email = _emailController.text.trim().toLowerCase();
+    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
+    
+    // First check email format
+    if (email.isEmpty) {
+      setState(() {
+        _isEmailValid = false;
+        _userExists = false;
+        _currentUser = null;
+        _emailError = null;
+        _isCheckingDatabase = false;
+      });
+      return;
+    }
+    
+    if (!emailRegex.hasMatch(email)) {
+      setState(() {
+        _isEmailValid = false;
+        _userExists = false;
+        _currentUser = null;
+        _emailError = 'Please enter a valid email address';
+        _isCheckingDatabase = false;
+      });
+      return;
+    }
+    
+    // Email format is valid, now check Firestore
+    setState(() {
+      _isCheckingDatabase = true;
+      _emailError = null;
+    });
+    
+    try {
+      // Check if user exists in Firestore using UserService
+      final user = await _userService.getUserByEmail(email);
+      
+      setState(() {
+        _currentUser = user;
+        _userExists = user != null;
+        _isEmailValid = user != null; // Allow all valid users, not just admins
+        _isCheckingDatabase = false;
+        
+        if (user == null) {
+          _emailError = 'Email not found. Access denied.';
+        } else {
+          _emailError = null;
+          // Check if user has restrictions
+          // Temporarily disabled isPaid check for testing
+          // if (!user.isPaid) {
+          //   _emailError = 'Account not activated. Please contact admin.';
+          //   _isEmailValid = false;
+          // } else 
+          if (user.numEntries >= 100) {
+            _emailError = 'Maximum entries reached for this account.';
+            _isEmailValid = false;
+          }
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _isCheckingDatabase = false;
+        _isEmailValid = false;
+        _userExists = false;
+        _currentUser = null;
+        _emailError = 'Error checking database. Please try again.';
+      });
+      print('Error checking user in Firestore: $e');
+    }
   }
 
   void _navigateToGame() {
+    if (!_isEmailValid || _currentUser == null) return;
+    
+    // Check if user is admin and route accordingly
+    final destination = _currentUser!.isAdmin 
+        ? AdminDashboard(currentUser: _currentUser!)
+        : WelcomeScreen(user: _currentUser!);
+    
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => const SuperBowlSquaresPage(),
+        pageBuilder: (context, animation, secondaryAnimation) => destination,
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(
             opacity: animation,
@@ -97,255 +210,162 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
             ],
           ),
         ),
-        child: SafeArea(
-          child: Center(
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) {
-                return FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: ScaleTransition(
-                    scale: _scaleAnimation,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SuperBowlBanner(),
-                        const SizedBox(height: 20),
-                        const FootballFieldLogo(),
-                        const SizedBox(height: 50),
-                        ElevatedButton(
-                          onPressed: _navigateToGame,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.amber,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 20),
-                            textStyle: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            elevation: 10,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Icon(Icons.sports_football, size: 28),
-                              SizedBox(width: 10),
-                              Text('ENTER THE GAME'),
-                              SizedBox(width: 10),
-                              Icon(Icons.arrow_forward, size: 28),
+        child: Column(
+          children: [
+            Expanded(
+              child: SafeArea(
+                child: Center(
+                  child: AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, child) {
+                      return FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: ScaleTransition(
+                          scale: _scaleAnimation,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SuperBowlBanner(),
+                              const SizedBox(height: 20),
+                              const FootballFieldLogo(),
+                              const SizedBox(height: 40),
+                              Container(
+                                width: 400,
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                child: Column(
+                                  children: [
+                                    TextField(
+                                      controller: _emailController,
+                                      keyboardType: TextInputType.emailAddress,
+                                      enabled: !_isCheckingDatabase,
+                                      maxLength: 100,
+                                      style: const TextStyle(color: Colors.white),
+                                      onSubmitted: (value) {
+                                        // Only navigate if email is valid and user pressed Enter
+                                        if (_isEmailValid && _currentUser != null) {
+                                          _navigateToGame();
+                                        }
+                                      },
+                                      decoration: InputDecoration(
+                                        counterText: '',
+                                        hintText: 'Use your invite email',
+                                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
+                                        labelText: 'Email',
+                                        labelStyle: const TextStyle(color: Colors.white),
+                                        errorText: _emailError,
+                                        errorStyle: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w500),
+                                        prefixIcon: const Icon(Icons.email, color: Colors.white70),
+                                        suffixIcon: _isCheckingDatabase 
+                                          ? const Padding(
+                                              padding: EdgeInsets.all(12.0),
+                                              child: SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                                                ),
+                                              ),
+                                            )
+                                          : null,
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(15),
+                                          borderSide: BorderSide(color: Colors.white.withOpacity(0.5), width: 2),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(15),
+                                          borderSide: const BorderSide(color: Colors.amber, width: 2),
+                                        ),
+                                        errorBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(15),
+                                          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+                                        ),
+                                        focusedErrorBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(15),
+                                          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+                                        ),
+                                        disabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(15),
+                                          borderSide: BorderSide(color: Colors.white.withOpacity(0.3), width: 2),
+                                        ),
+                                        filled: true,
+                                        fillColor: Colors.black.withOpacity(0.3),
+                                      ),
+                                    ),
+                                    if (_emailController.text.isNotEmpty && _userExists && !_isCheckingDatabase)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8.0),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Icon(Icons.check_circle, color: Colors.green.shade300, size: 20),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              'Access granted',
+                                              style: TextStyle(color: Colors.green.shade300, fontSize: 14, fontWeight: FontWeight.w500),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    if (_isCheckingDatabase)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8.0),
+                                        child: Text(
+                                          'Checking database...',
+                                          style: TextStyle(color: Colors.amber.shade300, fontSize: 14),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 30),
+                              ElevatedButton(
+                                onPressed: _isEmailValid ? _navigateToGame : null,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _isEmailValid ? Colors.amber : Colors.grey,
+                                  foregroundColor: _isEmailValid ? Colors.black : Colors.white60,
+                                  padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 20),
+                                  textStyle: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                  elevation: 10,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _currentUser?.isAdmin == true 
+                                          ? Icons.admin_panel_settings 
+                                          : Icons.sports_football, 
+                                      size: 28
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(_currentUser?.isAdmin == true 
+                                        ? 'ADMIN DASHBOARD' 
+                                        : 'ENTER THE GAME'),
+                                    const SizedBox(width: 10),
+                                    const Icon(Icons.arrow_forward, size: 28),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ),
             ),
-          ),
+            const FooterWidget(),
+          ],
         ),
       ),
     );
   }
 }
 
-class SuperBowlSquaresPage extends StatefulWidget {
-  const SuperBowlSquaresPage({super.key});
-
-  @override
-  State<SuperBowlSquaresPage> createState() => _SuperBowlSquaresPageState();
-}
-
-class _SuperBowlSquaresPageState extends State<SuperBowlSquaresPage> {
-  final List<int> awayTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-  final List<int> homeTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-  
-  final Map<String, String> selectedSquares = {};
-
-  void _onSquareTapped(int row, int col) {
-    final key = '$row-$col';
-    setState(() {
-      if (selectedSquares.containsKey(key)) {
-        selectedSquares.remove(key);
-      } else {
-        selectedSquares[key] = 'Player ${selectedSquares.length + 1}';
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Super Bowl Squares'),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: AspectRatio(
-            aspectRatio: 1.0,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final double gridSize = constraints.maxWidth;
-                final double cellSize = gridSize / 11;
-                
-                return Stack(
-                  children: [
-                    Positioned(
-                      top: 0,
-                      left: cellSize,
-                      child: SizedBox(
-                        width: cellSize * 10,
-                        height: cellSize,
-                        child: Row(
-                          children: [
-                            for (int i = 0; i < 10; i++)
-                              Container(
-                                width: cellSize,
-                                height: cellSize,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade100,
-                                  border: Border.all(color: Colors.black),
-                                ),
-                                child: Text(
-                                  '${awayTeamNumbers[i]}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    
-                    Positioned(
-                      top: cellSize,
-                      left: 0,
-                      child: SizedBox(
-                        width: cellSize,
-                        height: cellSize * 10,
-                        child: Column(
-                          children: [
-                            for (int i = 0; i < 10; i++)
-                              Container(
-                                width: cellSize,
-                                height: cellSize,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: Colors.red.shade100,
-                                  border: Border.all(color: Colors.black),
-                                ),
-                                child: Text(
-                                  '${homeTeamNumbers[i]}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      child: Container(
-                        width: cellSize,
-                        height: cellSize,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade300,
-                          border: Border.all(color: Colors.black),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'AWAY',
-                              style: TextStyle(
-                                fontSize: cellSize * 0.15,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue.shade700,
-                              ),
-                            ),
-                            Text(
-                              'HOME',
-                              style: TextStyle(
-                                fontSize: cellSize * 0.15,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red.shade700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    
-                    Positioned(
-                      top: cellSize,
-                      left: cellSize,
-                      child: SizedBox(
-                        width: cellSize * 10,
-                        height: cellSize * 10,
-                        child: GridView.builder(
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 10,
-                            childAspectRatio: 1.0,
-                          ),
-                          itemCount: 100,
-                          itemBuilder: (context, index) {
-                            final row = index ~/ 10;
-                            final col = index % 10;
-                            final key = '$row-$col';
-                            final isSelected = selectedSquares.containsKey(key);
-                            
-                            return GestureDetector(
-                              onTap: () => _onSquareTapped(row, col),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: isSelected 
-                                    ? Colors.green.shade200 
-                                    : Colors.white,
-                                  border: Border.all(
-                                    color: Colors.black,
-                                    width: 0.5,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: isSelected 
-                                    ? Text(
-                                        selectedSquares[key]!,
-                                        style: TextStyle(
-                                          fontSize: cellSize * 0.15,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      )
-                                    : null,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
