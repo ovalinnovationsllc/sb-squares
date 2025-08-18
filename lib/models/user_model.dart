@@ -4,8 +4,8 @@ class UserModel {
   final String email;
   final int numEntries;
   final bool isAdmin;
-  final bool isPaid;
-  final DateTime? created;
+  final bool hasPaid;
+  final DateTime? createdAt;
 
   UserModel({
     required this.id,
@@ -13,8 +13,8 @@ class UserModel {
     required this.email,
     required this.numEntries,
     required this.isAdmin,
-    required this.isPaid,
-    this.created,
+    required this.hasPaid,
+    this.createdAt,
   });
 
   UserModel copyWith({
@@ -23,8 +23,8 @@ class UserModel {
     String? email,
     int? numEntries,
     bool? isAdmin,
-    bool? isPaid,
-    DateTime? created,
+    bool? hasPaid,
+    DateTime? createdAt,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -32,8 +32,8 @@ class UserModel {
       email: email ?? this.email,
       numEntries: numEntries ?? this.numEntries,
       isAdmin: isAdmin ?? this.isAdmin,
-      isPaid: isPaid ?? this.isPaid,
-      created: created ?? this.created,
+      hasPaid: hasPaid ?? this.hasPaid,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
@@ -44,8 +44,8 @@ class UserModel {
       'email': email,
       'numEntries': numEntries,
       'isAdmin': isAdmin,
-      'isPaid': isPaid,
-      'created': created?.toIso8601String(),
+      'hasPaid': hasPaid,
+      'createdAt': createdAt?.toIso8601String(),
     };
   }
 
@@ -56,9 +56,9 @@ class UserModel {
       email: json['email'] as String,
       numEntries: json['numEntries'] as int? ?? 0,
       isAdmin: json['isAdmin'] as bool? ?? false,
-      isPaid: json['isPaid'] as bool? ?? false,
-      created: json['created'] != null 
-          ? DateTime.parse(json['created'] as String)
+      hasPaid: json['hasPaid'] as bool? ?? false,
+      createdAt: json['createdAt'] != null 
+          ? DateTime.parse(json['createdAt'] as String)
           : null,
     );
   }
@@ -70,9 +70,9 @@ class UserModel {
       email: data['email'] as String? ?? '',
       numEntries: data['numEntries'] as int? ?? 0,
       isAdmin: data['isAdmin'] as bool? ?? false,
-      isPaid: data['isPaid'] as bool? ?? false,
-      created: data['created'] != null 
-          ? (data['created'] as dynamic).toDate() as DateTime
+      hasPaid: data['hasPaid'] as bool? ?? false,
+      createdAt: data['createdAt'] != null 
+          ? (data['createdAt'] as dynamic).toDate() as DateTime
           : null,
     );
   }
@@ -83,14 +83,14 @@ class UserModel {
       'email': email,
       'numEntries': numEntries,
       'isAdmin': isAdmin,
-      'isPaid': isPaid,
-      'created': created,
+      'hasPaid': hasPaid,
+      'createdAt': createdAt,
     };
   }
 
   @override
   String toString() {
-    return 'UserModel(id: $id, displayName: $displayName, email: $email, numEntries: $numEntries, isAdmin: $isAdmin, isPaid: $isPaid, created: $created)';
+    return 'UserModel(id: $id, displayName: $displayName, email: $email, numEntries: $numEntries, isAdmin: $isAdmin, hasPaid: $hasPaid, createdAt: $createdAt)';
   }
 
   @override
@@ -103,8 +103,8 @@ class UserModel {
         other.email == email &&
         other.numEntries == numEntries &&
         other.isAdmin == isAdmin &&
-        other.isPaid == isPaid &&
-        other.created == created;
+        other.hasPaid == hasPaid &&
+        other.createdAt == createdAt;
   }
 
   @override
@@ -114,7 +114,7 @@ class UserModel {
         email.hashCode ^
         numEntries.hashCode ^
         isAdmin.hashCode ^
-        isPaid.hashCode ^
-        created.hashCode;
+        hasPaid.hashCode ^
+        createdAt.hashCode;
   }
 }

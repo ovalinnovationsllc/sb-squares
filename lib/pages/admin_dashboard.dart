@@ -3,6 +3,8 @@ import '../models/user_model.dart';
 import '../services/user_service.dart';
 import '../widgets/footer_widget.dart';
 import '../widgets/user_form_dialog.dart';
+import 'welcome_screen.dart';
+import 'squares_game_page.dart';
 
 class AdminDashboard extends StatefulWidget {
   final UserModel currentUser;
@@ -50,18 +52,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   int get _totalUsers => _users.length;
-  int get _paidUsers => _users.where((user) => user.isPaid).length;
-  int get _unpaidUsers => _users.where((user) => !user.isPaid).length;
+  int get _paidUsers => _users.where((user) => user.hasPaid).length;
+  int get _unpaidUsers => _users.where((user) => !user.hasPaid).length;
   int get _totalEntries => _users.fold(0, (sum, user) => sum + user.numEntries);
   int get _adminUsers => _users.where((user) => user.isAdmin).length;
 
   void _applyFilter() {
     switch (_sortFilter) {
       case 'paid':
-        _filteredUsers = _users.where((user) => user.isPaid).toList();
+        _filteredUsers = _users.where((user) => user.hasPaid).toList();
         break;
       case 'unpaid':
-        _filteredUsers = _users.where((user) => !user.isPaid).toList();
+        _filteredUsers = _users.where((user) => !user.hasPaid).toList();
         break;
       default:
         _filteredUsers = List.from(_users);
@@ -139,6 +141,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
       ),
     );
   }
+  
+  void _navigateToWelcome() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => WelcomeScreen(user: widget.currentUser),
+      ),
+    );
+  }
+  
+  void _navigateToGame() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => SquaresGamePage(user: widget.currentUser),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -148,6 +166,35 @@ class _AdminDashboardState extends State<AdminDashboard> {
         title: const Text('Admin Dashboard'),
         centerTitle: true,
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.sports_football),
+            tooltip: 'Play Game',
+            onSelected: (value) {
+              if (value == 'welcome') {
+                _navigateToWelcome();
+              } else if (value == 'game') {
+                _navigateToGame();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'welcome',
+                child: ListTile(
+                  leading: Icon(Icons.help_outline),
+                  title: Text('Game Instructions'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'game',
+                child: ListTile(
+                  leading: Icon(Icons.grid_view),
+                  title: Text('Play Game'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: Center(
@@ -341,11 +388,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: user.isPaid ? Colors.green : Colors.red,
+                          color: user.hasPaid ? Colors.green : Colors.red,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          user.isPaid ? 'Paid' : 'Unpaid',
+                          user.hasPaid ? 'Paid' : 'Unpaid',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -361,8 +408,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                     DataCell(
                       Text(
-                        user.created != null 
-                            ? '${user.created!.month}/${user.created!.day}/${user.created!.year}'
+                        user.createdAt != null 
+                            ? '${user.createdAt!.month}/${user.createdAt!.day}/${user.createdAt!.year}'
                             : '-',
                         style: const TextStyle(fontSize: 12),
                       ),

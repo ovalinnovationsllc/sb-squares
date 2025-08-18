@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../widgets/footer_widget.dart';
+import 'admin_dashboard.dart';
 
 class SquaresGamePage extends StatefulWidget {
   final UserModel user;

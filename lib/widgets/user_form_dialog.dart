@@ -24,7 +24,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
   final _numEntriesController = TextEditingController();
   
   bool _isAdmin = false;
-  bool _isPaid = false;
+  bool _hasPaid = false;
   bool _isLoading = false;
   
   final UserService _userService = UserService();
@@ -38,7 +38,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
       _displayNameController.text = widget.user!.displayName;
       _numEntriesController.text = widget.user!.numEntries.toString();
       _isAdmin = widget.user!.isAdmin;
-      _isPaid = widget.user!.isPaid;
+      _hasPaid = widget.user!.hasPaid;
     } else {
       // Default values for new user
       _numEntriesController.text = '0';
@@ -68,7 +68,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
           displayName: _displayNameController.text.trim(),
           numEntries: int.parse(_numEntriesController.text),
           isAdmin: _isAdmin,
-          isPaid: _isPaid,
+          hasPaid: _hasPaid,
         );
         
         final success = await _userService.updateUser(updatedUser);
@@ -86,7 +86,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
           displayName: _displayNameController.text.trim(),
           numEntries: int.parse(_numEntriesController.text),
           isAdmin: _isAdmin,
-          isPaid: _isPaid,
+          hasPaid: _hasPaid,
         );
         
         if (newUser != null) {
@@ -180,12 +180,12 @@ class _UserFormDialogState extends State<UserFormDialog> {
                 const SizedBox(height: 16),
                 SwitchListTile(
                   title: const Text('Paid Status'),
-                  subtitle: Text(_isPaid ? 'Account is paid' : 'Account is unpaid'),
-                  value: _isPaid,
-                  onChanged: (value) => setState(() => _isPaid = value),
+                  subtitle: Text(_hasPaid ? 'Account is paid' : 'Account is unpaid'),
+                  value: _hasPaid,
+                  onChanged: (value) => setState(() => _hasPaid = value),
                   secondary: Icon(
-                    _isPaid ? Icons.paid : Icons.money_off,
-                    color: _isPaid ? Colors.green : Colors.red,
+                    _hasPaid ? Icons.paid : Icons.money_off,
+                    color: _hasPaid ? Colors.green : Colors.red,
                   ),
                 ),
                 SwitchListTile(

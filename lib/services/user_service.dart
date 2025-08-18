@@ -54,9 +54,9 @@ class UserService {
       // Security logging
       print('ADMIN_ACTION: Creating user ${user.email}');
       
-      // Ensure created timestamp is set if not provided
-      final userWithTimestamp = user.created == null
-          ? user.copyWith(created: DateTime.now())
+      // Ensure createdAt timestamp is set if not provided
+      final userWithTimestamp = user.createdAt == null
+          ? user.copyWith(createdAt: DateTime.now())
           : user;
       
       await _firestore
@@ -76,7 +76,7 @@ class UserService {
     required String email,
     String displayName = '',
     bool isAdmin = false,
-    bool isPaid = false,
+    bool hasPaid = false,
     int numEntries = 0,
   }) async {
     try {
@@ -87,8 +87,8 @@ class UserService {
         email: email.toLowerCase(),
         numEntries: numEntries,
         isAdmin: isAdmin,
-        isPaid: isPaid,
-        created: DateTime.now(),
+        hasPaid: hasPaid,
+        createdAt: DateTime.now(),
       );
       
       await docRef.set(user.toFirestore());
@@ -131,7 +131,7 @@ class UserService {
     try {
       final QuerySnapshot result = await _firestore
           .collection(_collection)
-          .orderBy('created', descending: true)
+          .orderBy('createdAt', descending: true)
           .get();
 
       return result.docs.map((doc) {
@@ -152,8 +152,8 @@ class UserService {
       
       return {
         'totalUsers': users.length,
-        'paidUsers': users.where((user) => user.isPaid).length,
-        'unpaidUsers': users.where((user) => !user.isPaid).length,
+        'paidUsers': users.where((user) => user.hasPaid).length,
+        'unpaidUsers': users.where((user) => !user.hasPaid).length,
         'totalEntries': users.fold(0, (sum, user) => sum + user.numEntries),
         'adminUsers': users.where((user) => user.isAdmin).length,
       };

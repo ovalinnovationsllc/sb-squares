@@ -150,8 +150,8 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
         } else {
           _emailError = null;
           // Check if user has restrictions
-          // Temporarily disabled isPaid check for testing
-          // if (!user.isPaid) {
+          // Temporarily disabled hasPaid check for testing
+          // if (!user.hasPaid) {
           //   _emailError = 'Account not activated. Please contact admin.';
           //   _isEmailValid = false;
           // } else 
