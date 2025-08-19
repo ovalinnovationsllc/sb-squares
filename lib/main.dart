@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'config/security_config.dart';
 import 'models/user_model.dart';
 import 'services/user_service.dart';
 import 'pages/admin_dashboard.dart';
 import 'pages/welcome_screen.dart';
+import 'pages/squares_game_page.dart';
 import 'widgets/football_field_logo.dart';
 import 'widgets/super_bowl_banner.dart';
 import 'widgets/footer_widget.dart';
@@ -29,6 +31,16 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
+        textTheme: GoogleFonts.rubikTextTheme(
+          ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.green)).textTheme,
+        ),
+        appBarTheme: AppBarTheme(
+          titleTextStyle: GoogleFonts.rubik(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
       ),
       home: const LaunchPage(),
     );
@@ -149,12 +161,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
           _emailError = 'Email not found. Access denied.';
         } else {
           _emailError = null;
-          // Check if user has restrictions
-          // Temporarily disabled hasPaid check for testing
-          // if (!user.hasPaid) {
-          //   _emailError = 'Account not activated. Please contact admin.';
-          //   _isEmailValid = false;
-          // } else 
+          // Allow unpaid users to view the board but not select squares
           if (user.numEntries >= 100) {
             _emailError = 'Maximum entries reached for this account.';
             _isEmailValid = false;
@@ -176,10 +183,18 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   void _navigateToGame() {
     if (!_isEmailValid || _currentUser == null) return;
     
-    // Check if user is admin and route accordingly
-    final destination = _currentUser!.isAdmin 
-        ? AdminDashboard(currentUser: _currentUser!)
-        : WelcomeScreen(user: _currentUser!);
+    // Determine destination based on user type and whether they've seen instructions
+    Widget destination;
+    if (_currentUser!.isAdmin) {
+      // Admins go to admin dashboard
+      destination = AdminDashboard(currentUser: _currentUser!);
+    } else if (_currentUser!.hasSeenInstructions) {
+      // Regular users who have seen instructions go directly to the game
+      destination = SquaresGamePage(user: _currentUser!);
+    } else {
+      // First-time users see the welcome screen with instructions
+      destination = WelcomeScreen(user: _currentUser!);
+    }
     
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(

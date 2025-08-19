@@ -138,6 +138,10 @@ class _UserFormDialogState extends State<UserFormDialog> {
                     }
                     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
                     if (!emailRegex.hasMatch(value.trim())) {
+                      // Clear the field when invalid email is detected
+                      Future.delayed(Duration.zero, () {
+                        _emailController.clear();
+                      });
                       return 'Enter a valid email address';
                     }
                     return null;

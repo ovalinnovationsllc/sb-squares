@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
+import '../services/user_service.dart';
 import '../widgets/footer_widget.dart';
 import 'squares_game_page.dart';
 
@@ -8,10 +9,17 @@ class WelcomeScreen extends StatelessWidget {
 
   const WelcomeScreen({super.key, required this.user});
 
-  void _navigateToGame(BuildContext context) {
+  void _navigateToGame(BuildContext context) async {
+    // Mark that the user has seen the instructions
+    final userService = UserService();
+    await userService.markInstructionsSeen(user.id);
+    
+    // Update the local user model to reflect this change
+    final updatedUser = user.copyWith(hasSeenInstructions: true);
+    
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => SquaresGamePage(user: user),
+        pageBuilder: (context, animation, secondaryAnimation) => SquaresGamePage(user: updatedUser),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(
             opacity: animation,
@@ -28,7 +36,7 @@ class WelcomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Super Bowl Squares 2025'),
+        title: const Text('Super Bowl Squares 2026'),
         centerTitle: true,
         actions: [
           Padding(
@@ -72,7 +80,7 @@ class WelcomeScreen extends StatelessWidget {
                 children: [
                   // Title
                   const Text(
-                    'BUY A 2025 SUPER BOWL SQUARE - PLAY TO GET PAID',
+                    'BUY A 2026 SUPER BOWL SQUARE - PLAY TO GET PAID',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -82,7 +90,7 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    '* 12th year running *',
+                    '* 13th year running *',
                     style: TextStyle(
                       fontSize: 16,
                       fontStyle: FontStyle.italic,
@@ -100,7 +108,7 @@ class WelcomeScreen extends StatelessWidget {
                           Text(
                             'THE GAME NOW SELLS ITSELF - MORE PEOPLE INTERESTED EACH YEAR\n'
                             'YOU CAN BE IN - WAITING LIST EVERY YEAR - DON\'T MISS OUT\n'
-                            'SOLD OUT 2024 IN UNDER 25 MINUTES',
+                            'SOLD OUT 2025 IN UNDER 25 MINUTES',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                             textAlign: TextAlign.center,
                           ),

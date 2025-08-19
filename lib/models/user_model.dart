@@ -6,6 +6,7 @@ class UserModel {
   final bool isAdmin;
   final bool hasPaid;
   final DateTime? createdAt;
+  final bool hasSeenInstructions;
 
   UserModel({
     required this.id,
@@ -15,6 +16,7 @@ class UserModel {
     required this.isAdmin,
     required this.hasPaid,
     this.createdAt,
+    this.hasSeenInstructions = false,
   });
 
   UserModel copyWith({
@@ -25,6 +27,7 @@ class UserModel {
     bool? isAdmin,
     bool? hasPaid,
     DateTime? createdAt,
+    bool? hasSeenInstructions,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -34,6 +37,7 @@ class UserModel {
       isAdmin: isAdmin ?? this.isAdmin,
       hasPaid: hasPaid ?? this.hasPaid,
       createdAt: createdAt ?? this.createdAt,
+      hasSeenInstructions: hasSeenInstructions ?? this.hasSeenInstructions,
     );
   }
 
@@ -46,6 +50,7 @@ class UserModel {
       'isAdmin': isAdmin,
       'hasPaid': hasPaid,
       'createdAt': createdAt?.toIso8601String(),
+      'hasSeenInstructions': hasSeenInstructions,
     };
   }
 
@@ -60,6 +65,7 @@ class UserModel {
       createdAt: json['createdAt'] != null 
           ? DateTime.parse(json['createdAt'] as String)
           : null,
+      hasSeenInstructions: json['hasSeenInstructions'] as bool? ?? false,
     );
   }
   
@@ -74,6 +80,7 @@ class UserModel {
       createdAt: data['createdAt'] != null 
           ? (data['createdAt'] as dynamic).toDate() as DateTime
           : null,
+      hasSeenInstructions: data['hasSeenInstructions'] as bool? ?? false,
     );
   }
   
@@ -85,6 +92,7 @@ class UserModel {
       'isAdmin': isAdmin,
       'hasPaid': hasPaid,
       'createdAt': createdAt,
+      'hasSeenInstructions': hasSeenInstructions,
     };
   }
 
@@ -104,7 +112,8 @@ class UserModel {
         other.numEntries == numEntries &&
         other.isAdmin == isAdmin &&
         other.hasPaid == hasPaid &&
-        other.createdAt == createdAt;
+        other.createdAt == createdAt &&
+        other.hasSeenInstructions == hasSeenInstructions;
   }
 
   @override
@@ -115,6 +124,7 @@ class UserModel {
         numEntries.hashCode ^
         isAdmin.hashCode ^
         hasPaid.hashCode ^
-        createdAt.hashCode;
+        createdAt.hashCode ^
+        hasSeenInstructions.hashCode;
   }
 }

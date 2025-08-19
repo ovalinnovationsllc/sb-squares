@@ -1,4 +1,4 @@
-# Super Bowl Squares 2025
+# Super Bowl Squares 2026
 
 A Flutter web application for managing Super Bowl squares games with Firebase backend.
 

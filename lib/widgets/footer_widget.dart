@@ -38,7 +38,7 @@ class FooterWidget extends StatelessWidget {
               ),
             ),
             Text(
-              'Oval Innovations LLC',
+              'Oval Innovations, LLC',
               style: TextStyle(
                 color: Colors.white.withOpacity(0.9),
                 fontSize: 14,

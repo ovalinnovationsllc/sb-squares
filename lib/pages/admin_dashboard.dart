@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
+import '../models/game_score_model.dart';
 import '../services/user_service.dart';
+import '../services/game_score_service.dart';
+import '../services/square_selection_service.dart';
 import '../widgets/footer_widget.dart';
 import '../widgets/user_form_dialog.dart';
 import 'welcome_screen.dart';
@@ -17,16 +21,35 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   final UserService _userService = UserService();
+  final GameScoreService _gameScoreService = GameScoreService();
+  final SquareSelectionService _selectionService = SquareSelectionService();
+  final TextEditingController _searchController = TextEditingController();
   List<UserModel> _users = [];
   List<UserModel> _filteredUsers = [];
+  List<GameScoreModel> _quarterScores = [];
   bool _isLoading = true;
   String? _error;
   String _sortFilter = 'all'; // 'all', 'paid', 'unpaid'
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadUsers();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.toLowerCase();
+      _applyFilter();
+    });
   }
 
   Future<void> _loadUsers() async {
@@ -37,15 +60,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
       });
       
       final users = await _userService.getAllUsers();
+      final quarterScores = await _gameScoreService.getAllQuarterScores();
       
       setState(() {
         _users = users;
+        _quarterScores = quarterScores;
         _applyFilter();
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _error = 'Error loading users: $e';
+        _error = 'Error loading data: $e';
         _isLoading = false;
       });
     }
@@ -58,16 +83,31 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int get _adminUsers => _users.where((user) => user.isAdmin).length;
 
   void _applyFilter() {
+    List<UserModel> filtered = List.from(_users);
+    
+    // Apply payment status filter
     switch (_sortFilter) {
       case 'paid':
-        _filteredUsers = _users.where((user) => user.hasPaid).toList();
+        filtered = filtered.where((user) => user.hasPaid).toList();
         break;
       case 'unpaid':
-        _filteredUsers = _users.where((user) => !user.hasPaid).toList();
+        filtered = filtered.where((user) => !user.hasPaid).toList();
         break;
       default:
-        _filteredUsers = List.from(_users);
+        // Keep all users
+        break;
     }
+    
+    // Apply search filter
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((user) {
+        final displayName = user.displayName.toLowerCase();
+        final email = user.email.toLowerCase();
+        return displayName.contains(_searchQuery) || email.contains(_searchQuery);
+      }).toList();
+    }
+    
+    _filteredUsers = filtered;
   }
 
   void _updateFilter(String filter) {
@@ -156,6 +196,107 @@ class _AdminDashboardState extends State<AdminDashboard> {
         builder: (context) => SquaresGamePage(user: widget.currentUser),
       ),
     );
+  }
+
+  void _showQuarterScoreDialog(int quarter) {
+    final existingScore = _quarterScores.firstWhere(
+      (score) => score.quarter == quarter,
+      orElse: () => GameScoreModel(
+        id: '', 
+        quarter: quarter, 
+        homeScore: 0, 
+        awayScore: 0,
+      ),
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => _QuarterScoreDialog(
+        quarter: quarter,
+        existingScore: existingScore,
+        onScoreSaved: () {
+          _loadUsers(); // Reload data
+          _showSnackBar('Quarter $quarter score updated');
+        },
+        gameScoreService: _gameScoreService,
+      ),
+    );
+  }
+
+  void _clearQuarterScore(int quarter) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Clear Quarter $quarter Score'),
+        content: const Text('Are you sure you want to clear this quarter score?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await _gameScoreService.clearQuarterScore(quarter);
+      if (success) {
+        _showSnackBar('Quarter $quarter score cleared');
+        await _loadUsers();
+      } else {
+        _showSnackBar('Error clearing quarter score', isError: true);
+      }
+    }
+  }
+
+  void _clearAllQuarterScores() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear All Quarter Scores'),
+        content: const Text(
+          'Are you sure you want to clear ALL quarter scores?\n\n'
+          'This will remove all scores and winning square highlights.\n\n'
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      bool allSuccess = true;
+      
+      // Clear all quarters (1-4)
+      for (int quarter = 1; quarter <= 4; quarter++) {
+        final success = await _gameScoreService.clearQuarterScore(quarter);
+        if (!success) {
+          allSuccess = false;
+        }
+      }
+      
+      if (allSuccess) {
+        _showSnackBar('All quarter scores cleared successfully');
+        await _loadUsers();
+      } else {
+        _showSnackBar('Some scores could not be cleared', isError: true);
+        await _loadUsers(); // Still reload to show current state
+      }
+    }
   }
 
   @override
@@ -262,6 +403,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             children: [
                               _buildSummaryList(),
                               const SizedBox(height: 24),
+                              _buildQuarterScoresSection(),
+                              const SizedBox(height: 24),
+                              _buildBoardManagementSection(),
+                              const SizedBox(height: 24),
                               _buildUsersTable(),
                             ],
                           ),
@@ -320,6 +465,289 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
+  Widget _buildBoardManagementSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Board Management',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _clearAllBoardSelections,
+                      icon: const Icon(Icons.clear_all, size: 16),
+                      label: const Text('Clear All Squares'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepOrange,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _clearAllUsers,
+                      icon: const Icon(Icons.delete_forever, size: 16),
+                      label: const Text('Clear All Users'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Use this section to manage the game. Clear squares to remove selections, or clear all users to reset the entire system.',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _clearAllBoardSelections() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear All Square Selections'),
+        content: const Text(
+          'Are you sure you want to clear ALL square selections from the board?\n\n'
+          'This will remove all user selections from all quarters.\n\n'
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await _selectionService.clearAllSelections();
+      
+      if (success) {
+        _showSnackBar('All square selections cleared successfully');
+      } else {
+        _showSnackBar('Failed to clear selections', isError: true);
+      }
+    }
+  }
+
+  void _clearAllUsers() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear All Users'),
+        content: const Text(
+          'Are you sure you want to delete ALL users from the system?\n\n'
+          'This will permanently delete all user accounts and data.\n\n'
+          'WARNING: This action cannot be undone and will remove all users including admins (except yourself).',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+            child: const Text('DELETE ALL USERS'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      // Show second confirmation
+      final doubleConfirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('FINAL CONFIRMATION'),
+          content: const Text(
+            'This will delete ALL users permanently.\n\n'
+            'Are you absolutely sure?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900),
+              child: const Text('YES, DELETE ALL'),
+            ),
+          ],
+        ),
+      );
+
+      if (doubleConfirmed == true) {
+        final success = await _userService.clearAllUsers();
+        
+        if (success) {
+          _showSnackBar('All users cleared successfully');
+          await _loadUsers();
+        } else {
+          _showSnackBar('Failed to clear users', isError: true);
+        }
+      }
+    }
+  }
+
+  Widget _buildQuarterScoresSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Quarter Scores & Winners',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _clearAllQuarterScores,
+                  icon: const Icon(Icons.clear_all, size: 16),
+                  label: const Text('Clear All Scores'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                childAspectRatio: 1.2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: 4,
+              itemBuilder: (context, index) {
+                final quarter = index + 1;
+                final score = _quarterScores.firstWhere(
+                  (s) => s.quarter == quarter,
+                  orElse: () => GameScoreModel(
+                    id: '', 
+                    quarter: quarter, 
+                    homeScore: 0, 
+                    awayScore: 0,
+                  ),
+                );
+                final hasScore = score.id.isNotEmpty;
+
+                return Card(
+                  elevation: 1,
+                  color: hasScore ? Colors.green.shade50 : Colors.grey.shade100,
+                  child: InkWell(
+                    onTap: () => _showQuarterScoreDialog(quarter),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Q$quarter',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          if (hasScore) ...[
+                            Text(
+                              'Home: ${score.homeScore}',
+                              style: GoogleFonts.rubik(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              'Away: ${score.awayScore}',
+                              style: GoogleFonts.rubik(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Winner: ${score.homeLastDigit}-${score.awayLastDigit}',
+                              style: GoogleFonts.rubik(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, size: 16),
+                                  onPressed: () => _showQuarterScoreDialog(quarter),
+                                  tooltip: 'Edit Score',
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.clear, size: 16),
+                                  onPressed: () => _clearQuarterScore(quarter),
+                                  tooltip: 'Clear Score',
+                                ),
+                              ],
+                            ),
+                          ] else ...[
+                            const Icon(
+                              Icons.add_circle_outline,
+                              size: 32,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Set Score',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildUsersTable() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,6 +761,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
             Row(
               children: [
+                SizedBox(
+                  width: 200,
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      hintText: 'Search users...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
                 Text('Filter: ', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
                 DropdownButton<String>(
                   value: _sortFilter,
@@ -444,6 +886,211 @@ class _AdminDashboardState extends State<AdminDashboard> {
               }).toList(),
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuarterScoreDialog extends StatefulWidget {
+  final int quarter;
+  final GameScoreModel existingScore;
+  final VoidCallback onScoreSaved;
+  final GameScoreService gameScoreService;
+
+  const _QuarterScoreDialog({
+    required this.quarter,
+    required this.existingScore,
+    required this.onScoreSaved,
+    required this.gameScoreService,
+  });
+
+  @override
+  State<_QuarterScoreDialog> createState() => _QuarterScoreDialogState();
+}
+
+class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _homeScoreController = TextEditingController();
+  final _awayScoreController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.existingScore.id.isNotEmpty) {
+      _homeScoreController.text = widget.existingScore.homeScore.toString();
+      _awayScoreController.text = widget.existingScore.awayScore.toString();
+    }
+  }
+
+  @override
+  void dispose() {
+    _homeScoreController.dispose();
+    _awayScoreController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveScore() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final homeScore = int.parse(_homeScoreController.text);
+      final awayScore = int.parse(_awayScoreController.text);
+
+      final success = await widget.gameScoreService.setQuarterScore(
+        quarter: widget.quarter,
+        homeScore: homeScore,
+        awayScore: awayScore,
+      );
+
+      if (success) {
+        widget.onScoreSaved();
+        Navigator.of(context).pop();
+      } else {
+        _showError('Failed to save score');
+      }
+    } catch (e) {
+      _showError('Error saving score: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final homeScore = int.tryParse(_homeScoreController.text) ?? 0;
+    final awayScore = int.tryParse(_awayScoreController.text) ?? 0;
+    final homeDigit = homeScore % 10;
+    final awayDigit = awayScore % 10;
+
+    return AlertDialog(
+      title: Text('Quarter ${widget.quarter} Score'),
+      content: SizedBox(
+        width: 400,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _homeScoreController,
+                      decoration: const InputDecoration(
+                        labelText: 'Home Score',
+                        prefixIcon: Icon(Icons.home),
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Required';
+                        }
+                        final num = int.tryParse(value.trim());
+                        if (num == null || num < 0) {
+                          return 'Valid number >= 0';
+                        }
+                        return null;
+                      },
+                      onChanged: (value) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _awayScoreController,
+                      decoration: const InputDecoration(
+                        labelText: 'Away Score',
+                        prefixIcon: Icon(Icons.flight_takeoff),
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Required';
+                        }
+                        final num = int.tryParse(value.trim());
+                        if (num == null || num < 0) {
+                          return 'Valid number >= 0';
+                        }
+                        return null;
+                      },
+                      onChanged: (value) => setState(() {}),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (_homeScoreController.text.isNotEmpty && _awayScoreController.text.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Winning Combination',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Home: $homeScore (last digit: $homeDigit)',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      Text(
+                        'Away: $awayScore (last digit: $awayDigit)',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Winning Square: $homeDigit-$awayDigit',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Payouts: Winner \$2,400 | Adjacent \$150 | Diagonal \$100',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _saveScore,
+          child: _isLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save Score'),
         ),
       ],
     );

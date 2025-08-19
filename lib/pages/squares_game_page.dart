@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
+import '../models/game_score_model.dart';
+import '../models/square_selection_model.dart';
+import '../services/game_score_service.dart';
+import '../services/square_selection_service.dart';
 import '../widgets/footer_widget.dart';
 import 'admin_dashboard.dart';
 
@@ -14,6 +19,8 @@ class SquaresGamePage extends StatefulWidget {
 
 class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final GameScoreService _gameScoreService = GameScoreService();
+  final SquareSelectionService _selectionService = SquareSelectionService();
   final List<int> awayTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
   final List<int> homeTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
   
@@ -23,10 +30,73 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   final Map<String, String> q3SelectedSquares = {};
   final Map<String, String> q4SelectedSquares = {};
   
+  bool _isLoadingSelections = true;
+  
+  // Quarter scores for highlighting winners
+  List<GameScoreModel> _quarterScores = [];
+  
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _loadQuarterScores();
+    _loadSelections();
+  }
+  
+  Future<void> _loadQuarterScores() async {
+    try {
+      final scores = await _gameScoreService.getAllQuarterScores();
+      setState(() {
+        _quarterScores = scores;
+      });
+    } catch (e) {
+      print('Error loading quarter scores: $e');
+    }
+  }
+  
+  Future<void> _loadSelections() async {
+    setState(() => _isLoadingSelections = true);
+    
+    try {
+      final allSelections = await _selectionService.getAllSelections();
+      
+      print('Loaded selections from Firestore:');
+      print('Q1: ${allSelections[1]?.length ?? 0} selections');
+      print('Q2: ${allSelections[2]?.length ?? 0} selections');
+      print('Q3: ${allSelections[3]?.length ?? 0} selections');
+      print('Q4: ${allSelections[4]?.length ?? 0} selections');
+      
+      setState(() {
+        // Clear existing selections
+        q1SelectedSquares.clear();
+        q2SelectedSquares.clear();
+        q3SelectedSquares.clear();
+        q4SelectedSquares.clear();
+        
+        // Load selections for each quarter
+        for (final selection in allSelections[1] ?? []) {
+          q1SelectedSquares[selection.squareKey] = selection.userName;
+          print('Q1: Adding ${selection.userName} at ${selection.squareKey}');
+        }
+        for (final selection in allSelections[2] ?? []) {
+          q2SelectedSquares[selection.squareKey] = selection.userName;
+          print('Q2: Adding ${selection.userName} at ${selection.squareKey}');
+        }
+        for (final selection in allSelections[3] ?? []) {
+          q3SelectedSquares[selection.squareKey] = selection.userName;
+          print('Q3: Adding ${selection.userName} at ${selection.squareKey}');
+        }
+        for (final selection in allSelections[4] ?? []) {
+          q4SelectedSquares[selection.squareKey] = selection.userName;
+          print('Q4: Adding ${selection.userName} at ${selection.squareKey}');
+        }
+        
+        _isLoadingSelections = false;
+      });
+    } catch (e) {
+      print('Error loading selections: $e');
+      setState(() => _isLoadingSelections = false);
+    }
   }
   
   @override
@@ -35,30 +105,96 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     super.dispose();
   }
 
-  void _onSquareTapped(int row, int col, int quarter) {
+  void _onSquareTapped(int row, int col, int quarter) async {
+    if (_isLoadingSelections) return; // Prevent taps while loading
+    
+    // Check if user has paid - if not, show payment required message
+    if (!widget.user.hasPaid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment required to select squares. Please contact admin to activate your account.'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+    
     final key = '$row-$col';
     final selectedSquares = _getQuarterMap(quarter);
+    final userName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
     
-    setState(() {
-      // Check if user has already selected a square for this quarter
-      if (selectedSquares.values.contains(widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName)) {
-        // Remove their previous selection
-        selectedSquares.removeWhere((k, v) => v == (widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName));
-      }
+    // Check if square is already taken by another user
+    if (selectedSquares.containsKey(key) && selectedSquares[key] != userName) {
+      // Square is taken by someone else, show message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('This square is already taken by ${selectedSquares[key]}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    
+    // Check if user is trying to select a new square (not deselecting)
+    final isDeselecting = selectedSquares.containsKey(key) && selectedSquares[key] == userName;
+    
+    // Check if user has reached their limit for this quarter
+    if (!isDeselecting && _getUserQuarterSelectionCount(quarter) >= widget.user.numEntries) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('You have reached your maximum of ${widget.user.numEntries} square${widget.user.numEntries != 1 ? 's' : ''} for this quarter'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    
+    // Save to Firestore
+    print('Attempting to save selection: Q$quarter, ($row,$col) for user ${widget.user.id}');
+    final success = await _selectionService.saveSelection(
+      quarter: quarter,
+      row: row,
+      col: col,
+      userId: widget.user.id,
+      userName: userName,
+    );
+    
+    print('Save result: $success');
+    
+    if (success) {
+      // Reload selections to ensure sync with Firestore
+      await _loadSelections();
       
-      // Toggle the current square
-      if (selectedSquares.containsKey(key)) {
-        // If clicking on an already selected square by this user, deselect it
-        if (selectedSquares[key] == (widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName)) {
-          selectedSquares.remove(key);
-        }
+      // Show feedback
+      if (isDeselecting) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Square deselected'),
+            backgroundColor: Colors.blue,
+            duration: Duration(seconds: 1),
+          ),
+        );
       } else {
-        // Select the new square
-        selectedSquares[key] = widget.user.displayName.isEmpty 
-            ? widget.user.email 
-            : widget.user.displayName;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Square selected!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 1),
+          ),
+        );
       }
-    });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to save selection. Please try again.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
   
   Map<String, String> _getQuarterMap(int quarter) {
@@ -79,11 +215,53 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   int _getUserSelectionsCount() {
     int count = 0;
     final userName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
-    if (q1SelectedSquares.values.contains(userName)) count++;
-    if (q2SelectedSquares.values.contains(userName)) count++;
-    if (q3SelectedSquares.values.contains(userName)) count++;
-    if (q4SelectedSquares.values.contains(userName)) count++;
+    count += q1SelectedSquares.values.where((v) => v == userName).length;
+    count += q2SelectedSquares.values.where((v) => v == userName).length;
+    count += q3SelectedSquares.values.where((v) => v == userName).length;
+    count += q4SelectedSquares.values.where((v) => v == userName).length;
     return count;
+  }
+  
+  int _getUserQuarterSelectionCount(int quarter) {
+    final userName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
+    final selectedSquares = _getQuarterMap(quarter);
+    return selectedSquares.values.where((v) => v == userName).length;
+  }
+  
+  String _getSquareType(int row, int col, int quarter) {
+    // Find the score for this quarter
+    final score = _quarterScores.firstWhere(
+      (s) => s.quarter == quarter,
+      orElse: () => GameScoreModel(id: '', quarter: quarter, homeScore: 0, awayScore: 0),
+    );
+    
+    if (score.id.isEmpty) return 'normal'; // No score set yet
+    
+    final homeDigit = score.homeLastDigit;
+    final awayDigit = score.awayLastDigit;
+    
+    // Check if this is the winning square
+    if (row == homeDigit && col == awayDigit) {
+      return 'winner';
+    }
+    
+    // Check if this is an adjacent square (up, down, left, right)
+    if ((row == (homeDigit + 1) % 10 && col == awayDigit) || // down
+        (row == (homeDigit - 1 + 10) % 10 && col == awayDigit) || // up
+        (row == homeDigit && col == (awayDigit + 1) % 10) || // right
+        (row == homeDigit && col == (awayDigit - 1 + 10) % 10)) { // left
+      return 'adjacent';
+    }
+    
+    // Check if this is a diagonal square
+    if ((row == (homeDigit + 1) % 10 && col == (awayDigit + 1) % 10) || // down-right
+        (row == (homeDigit + 1) % 10 && col == (awayDigit - 1 + 10) % 10) || // down-left
+        (row == (homeDigit - 1 + 10) % 10 && col == (awayDigit + 1) % 10) || // up-right
+        (row == (homeDigit - 1 + 10) % 10 && col == (awayDigit - 1 + 10) % 10)) { // up-left
+      return 'diagonal';
+    }
+    
+    return 'normal';
   }
   
   void _showInstructions() {
@@ -117,7 +295,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       const Text(
-                        'BUY A 2025 SUPER BOWL SQUARE - PLAY TO GET PAID',
+                        'BUY A 2026 SUPER BOWL SQUARE - PLAY TO GET PAID',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -127,7 +305,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        '* 12th year running *',
+                        '* 13th year running *',
                         style: TextStyle(
                           fontSize: 14,
                           fontStyle: FontStyle.italic,
@@ -332,6 +510,20 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
         ),
         actions: [
           IconButton(
+            onPressed: () async {
+              await _loadQuarterScores();
+              await _loadSelections();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Board refreshed'),
+                  duration: Duration(seconds: 1),
+                ),
+              );
+            },
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+          ),
+          IconButton(
             onPressed: _showInstructions,
             icon: const Icon(Icons.help_outline),
             tooltip: 'Game Instructions',
@@ -353,12 +545,17 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                     ),
                   ),
                   Text(
-                    'Selections: ${_getUserSelectionsCount()}/${widget.user.numEntries * 4}',
+                    widget.user.hasPaid 
+                        ? 'Selections: ${_getUserSelectionsCount()}/${widget.user.numEntries * 4}'
+                        : 'Payment Required',
                     style: TextStyle(
                       fontSize: 12,
-                      color: _getUserSelectionsCount() >= widget.user.numEntries * 4
-                          ? Colors.red 
-                          : Colors.white70,
+                      color: !widget.user.hasPaid
+                          ? Colors.orange.shade300
+                          : _getUserSelectionsCount() >= widget.user.numEntries * 4
+                              ? Colors.red 
+                              : Colors.white70,
+                      fontWeight: !widget.user.hasPaid ? FontWeight.bold : null,
                     ),
                   ),
                 ],
@@ -395,6 +592,12 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   }
   
   Widget _buildQuarterGrid(int quarter) {
+    if (_isLoadingSelections) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+    
     final selectedSquares = _getQuarterMap(quarter);
     
     return Center(
@@ -404,10 +607,34 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
           children: [
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
-              child: Text(
-                'Quarter $quarter - ${selectedSquares.values.where((v) => v == (widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName)).length} of ${widget.user.numEntries} box${widget.user.numEntries != 1 ? 'es' : ''} selected',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              ),
+              child: widget.user.hasPaid
+                  ? Text(
+                      '${_getUserQuarterSelectionCount(quarter)} of ${widget.user.numEntries} square${widget.user.numEntries != 1 ? 's' : ''} selected',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.orange.shade300),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock, color: Colors.orange.shade700, size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Payment required to select squares',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.orange.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
             ),
             Expanded(
               child: AspectRatio(
@@ -438,9 +665,10 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                     ),
                                     child: Text(
                                       '${awayTeamNumbers[i]}',
-                                      style: const TextStyle(
+                                      style: GoogleFonts.rubik(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
+                                        color: Colors.blue.shade700,
                                       ),
                                     ),
                                   ),
@@ -468,9 +696,10 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                     ),
                                     child: Text(
                                       '${homeTeamNumbers[i]}',
-                                      style: const TextStyle(
+                                      style: GoogleFonts.rubik(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
+                                        color: Colors.red.shade700,
                                       ),
                                     ),
                                   ),
@@ -494,7 +723,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                               children: [
                                 Text(
                                   'AWAY',
-                                  style: TextStyle(
+                                  style: GoogleFonts.rubik(
                                     fontSize: cellSize * 0.15,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.blue.shade700,
@@ -502,7 +731,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                 ),
                                 Text(
                                   'HOME',
-                                  style: TextStyle(
+                                  style: GoogleFonts.rubik(
                                     fontSize: cellSize * 0.15,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.red.shade700,
@@ -531,30 +760,88 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                 final col = index % 10;
                                 final key = '$row-$col';
                                 final isSelected = selectedSquares.containsKey(key);
+                                final squareType = _getSquareType(row, col, quarter);
+                                
+                                // Determine the color based on square type
+                                Color backgroundColor;
+                                Color borderColor = Colors.black;
+                                double borderWidth = 0.5;
+                                
+                                if (squareType == 'winner') {
+                                  backgroundColor = isSelected ? Colors.red.shade400 : Colors.red.shade200;
+                                  borderColor = Colors.red.shade700;
+                                  borderWidth = 2.0;
+                                } else if (squareType == 'adjacent') {
+                                  backgroundColor = isSelected ? Colors.amber.shade400 : Colors.amber.shade200;
+                                  borderColor = Colors.amber.shade700;
+                                  borderWidth = 1.5;
+                                } else if (squareType == 'diagonal') {
+                                  backgroundColor = isSelected ? Colors.blue.shade300 : Colors.blue.shade200;
+                                  borderColor = Colors.blue.shade600;
+                                  borderWidth = 1.0;
+                                } else {
+                                  backgroundColor = isSelected ? Colors.green.shade200 : Colors.white;
+                                }
                                 
                                 return GestureDetector(
                                   onTap: () => _onSquareTapped(row, col, quarter),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: isSelected 
-                                        ? Colors.green.shade200 
-                                        : Colors.white,
-                                      border: Border.all(
-                                        color: Colors.black,
-                                        width: 0.5,
+                                  child: Opacity(
+                                    opacity: widget.user.hasPaid ? 1.0 : 0.7,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: backgroundColor,
+                                        border: Border.all(
+                                          color: borderColor,
+                                          width: borderWidth,
+                                        ),
                                       ),
-                                    ),
-                                    child: Center(
-                                      child: isSelected 
-                                        ? Text(
-                                            selectedSquares[key]!,
-                                            style: TextStyle(
-                                              fontSize: cellSize * 0.15,
-                                              fontWeight: FontWeight.w500,
+                                    child: Stack(
+                                      children: [
+                                        if (squareType != 'normal') 
+                                          Positioned(
+                                            top: 2,
+                                            right: 2,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(2),
+                                              decoration: BoxDecoration(
+                                                color: squareType == 'winner' 
+                                                  ? Colors.red.shade700
+                                                  : squareType == 'adjacent'
+                                                    ? Colors.amber.shade700
+                                                    : Colors.blue.shade700,
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                squareType == 'winner' 
+                                                  ? '\$2400'
+                                                  : squareType == 'adjacent'
+                                                    ? '\$150'
+                                                    : '\$100',
+                                                style: GoogleFonts.rubik(
+                                                  color: Colors.white,
+                                                  fontSize: 8,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
                                             ),
-                                            textAlign: TextAlign.center,
-                                          )
-                                        : null,
+                                          ),
+                                        Center(
+                                          child: isSelected 
+                                            ? Text(
+                                                selectedSquares[key]!,
+                                                style: TextStyle(
+                                                  fontSize: cellSize * 0.15,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: squareType != 'normal' 
+                                                    ? Colors.white 
+                                                    : Colors.black,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              )
+                                            : null,
+                                        ),
+                                      ],
+                                    ),
                                     ),
                                   ),
                                 );

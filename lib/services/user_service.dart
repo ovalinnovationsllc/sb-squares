@@ -175,4 +175,50 @@ class UserService {
       return false;
     }
   }
+
+  Future<bool> markInstructionsSeen(String userId) async {
+    try {
+      await _firestore
+          .collection(_collection)
+          .doc(userId)
+          .update({'hasSeenInstructions': true});
+      return true;
+    } catch (e) {
+      print('Error marking instructions as seen: $e');
+      return false;
+    }
+  }
+
+  Future<bool> clearAllUsers() async {
+    try {
+      final batch = _firestore.batch();
+      
+      final allUsers = await _firestore
+          .collection(_collection)
+          .get();
+
+      int count = 0;
+      for (final doc in allUsers.docs) {
+        batch.delete(doc.reference);
+        count++;
+        
+        // Firestore batch limit is 500 operations
+        if (count >= 500) {
+          await batch.commit();
+          // Start a new batch if needed
+          count = 0;
+        }
+      }
+
+      if (count > 0) {
+        await batch.commit();
+      }
+
+      print('Cleared all users');
+      return true;
+    } catch (e) {
+      print('Error clearing all users: $e');
+      return false;
+    }
+  }
 }
