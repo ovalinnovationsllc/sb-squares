@@ -46,4 +46,3 @@ app.*.map.json
 
 # Firebase configuration with sensitive API keys
 lib/firebase_options.dart
-web/create_config.html
