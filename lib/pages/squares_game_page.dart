@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
@@ -11,6 +12,7 @@ import '../services/square_selection_service.dart';
 import '../services/board_numbers_service.dart';
 import '../services/game_config_service.dart';
 import '../widgets/footer_widget.dart';
+import '../utils/user_color_generator.dart';
 import 'admin_dashboard.dart';
 
 class SquaresGamePage extends StatefulWidget {
@@ -575,6 +577,14 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     );
   }
 
+  void _logout() {
+    // Clear localStorage
+    html.window.localStorage.remove('sb_squares_user');
+    
+    // Use a simple page refresh approach for web
+    html.window.location.reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -643,6 +653,11 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                 ],
               ),
             ),
+          ),
+          IconButton(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
           ),
           if (widget.user.isAdmin)
             const Padding(
@@ -871,8 +886,9 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                 final key = '$row-$col';
                                 final isSelected = selectedSquares.containsKey(key);
                                 final squareType = _getSquareType(row, col, quarter);
+                                final squareOwner = selectedSquares[key];
                                 
-                                // Determine the color based on square type
+                                // Determine the color based on square type and user
                                 Color backgroundColor;
                                 Color borderColor = Colors.black;
                                 double borderWidth = 0.5;
@@ -890,7 +906,21 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                   borderColor = Colors.blue.shade600;
                                   borderWidth = 1.0;
                                 } else {
-                                  backgroundColor = isSelected ? Colors.green.shade200 : Colors.white;
+                                  // Use user-specific colors for normal squares
+                                  if (isSelected && squareOwner != null) {
+                                    // Generate a unique color for each user based on their name
+                                    backgroundColor = UserColorGenerator.getColorForUser(squareOwner);
+                                    borderColor = UserColorGenerator.getDarkColorForUser(squareOwner);
+                                    
+                                    // If it's the current user's square, make it slightly different
+                                    final currentUserName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
+                                    if (squareOwner == currentUserName) {
+                                      backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwner);
+                                      borderWidth = 1.0;
+                                    }
+                                  } else {
+                                    backgroundColor = Colors.white;
+                                  }
                                 }
                                 
                                 return GestureDetector(
@@ -944,7 +974,15 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                                   fontWeight: FontWeight.w500,
                                                   color: squareType != 'normal' 
                                                     ? Colors.white 
-                                                    : Colors.black,
+                                                    : Colors.white, // White text on colored backgrounds
+                                                  shadows: [
+                                                    // Add subtle shadow for better readability
+                                                    Shadow(
+                                                      color: Colors.black.withOpacity(0.5),
+                                                      blurRadius: 2,
+                                                      offset: const Offset(1, 1),
+                                                    ),
+                                                  ],
                                                 ),
                                                 textAlign: TextAlign.center,
                                               )

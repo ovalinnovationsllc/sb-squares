@@ -1,3 +1,4 @@
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
@@ -11,6 +12,7 @@ import '../services/board_numbers_service.dart';
 import '../services/game_config_service.dart';
 import '../widgets/footer_widget.dart';
 import '../widgets/user_form_dialog.dart';
+import '../utils/date_formatter.dart';
 import 'welcome_screen.dart';
 import 'squares_game_page.dart';
 
@@ -320,6 +322,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  void _logout() {
+    // Clear localStorage
+    html.window.localStorage.remove('sb_squares_user');
+    
+    // Show confirmation and navigate back to login screen
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Logged out successfully'),
+        backgroundColor: _primaryColor,
+      ),
+    );
+    
+    // Use a simple page refresh approach for web
+    html.window.location.reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -390,6 +408,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
               Icons.admin_panel_settings,
               color: _secondaryColor,
             ),
+          ),
+          IconButton(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
           ),
         ],
       ),
@@ -523,8 +546,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         icon: const Icon(Icons.shuffle, size: 16),
                         label: const Text('Re-randomize'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _secondaryColor,
-                          foregroundColor: _colorScheme.onSecondary,
+                          backgroundColor: _primaryColor,
+                          foregroundColor: _colorScheme.onPrimary,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -533,8 +556,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         icon: const Icon(Icons.clear, size: 16),
                         label: const Text('Clear Numbers'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _secondaryColor,
-                          foregroundColor: _colorScheme.onSecondary,
+                          backgroundColor: _errorColor,
+                          foregroundColor: _colorScheme.onError,
                         ),
                       ),
                     ],
@@ -688,8 +711,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       icon: const Icon(Icons.clear_all, size: 16),
                       label: const Text('Clear All Squares'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _secondaryColor,
-                        foregroundColor: _colorScheme.onSecondary,
+                        backgroundColor: _errorColor,
+                        foregroundColor: _colorScheme.onError,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -830,7 +853,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primaryColor,
+              foregroundColor: _colorScheme.onPrimary,
+            ),
             child: const Text('Randomize Numbers'),
           ),
         ],
@@ -871,7 +897,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: _secondaryColor),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primaryColor,
+              foregroundColor: _colorScheme.onPrimary,
+            ),
             child: const Text('Clear Numbers'),
           ),
         ],
@@ -898,16 +927,46 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Team Names',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Team Names',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _showEditTeamNamesDialog,
+                      icon: const Icon(Icons.edit, size: 16),
+                      label: const Text('Edit Teams'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primaryColor,
+                        foregroundColor: _colorScheme.onPrimary,
+                      ),
+                    ),
+                    if (_currentConfig == null) ...[
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: _forceCreateConfig,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Create Config'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _primaryColor,
+                          foregroundColor: _colorScheme.onPrimary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: _colorScheme.errorContainer,
                       borderRadius: BorderRadius.circular(8),
@@ -928,7 +987,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         Text(
                           _currentConfig?.homeTeamName ?? 'AFC',
                           style: GoogleFonts.rubik(
-                            fontSize: 18,
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
                             color: _colorScheme.onErrorContainer,
                           ),
@@ -940,7 +999,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: _colorScheme.secondaryContainer,
                       borderRadius: BorderRadius.circular(8),
@@ -961,7 +1020,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         Text(
                           _currentConfig?.awayTeamName ?? 'NFC',
                           style: GoogleFonts.rubik(
-                            fontSize: 18,
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
                             color: _colorScheme.onSecondaryContainer,
                           ),
@@ -969,31 +1028,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _showEditTeamNamesDialog,
-                      icon: const Icon(Icons.edit, size: 16),
-                      label: const Text('Edit Teams'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _colorScheme.tertiary,
-                        foregroundColor: _colorScheme.onTertiary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (_currentConfig == null)
-                      ElevatedButton.icon(
-                        onPressed: _forceCreateConfig,
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Create Config'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _secondaryColor,
-                          foregroundColor: _colorScheme.onSecondary,
-                        ),
-                      ),
-                  ],
                 ),
               ],
             ),
@@ -1088,7 +1122,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _showSnackBar('Failed to update team names', isError: true);
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: _colorScheme.tertiary),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primaryColor,
+              foregroundColor: _colorScheme.onPrimary,
+            ),
             child: const Text('Save'),
           ),
         ],
@@ -1124,124 +1161,137 @@ class _AdminDashboardState extends State<AdminDashboard> {
         }
 
         return Column(
-      children: [
-        // Winner (Main prize)
-        if (winners['winner'] != null && winners['winner']!.isNotEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: _colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              '🏆 ${winners['winner']!.first} - \$2400',
-              style: GoogleFonts.rubik(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: _colorScheme.onPrimaryContainer,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Winner (Main prize) - full width
+            if (winners['winner'] != null && winners['winner']!.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '🏆 ${winners['winner']!.first} - \$2400',
+                  style: GoogleFonts.rubik(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: _colorScheme.onPrimaryContainer,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        
-        const SizedBox(height: 2),
-        
-        // Adjacent winners
-        if (winners['adjacent'] != null && winners['adjacent']!.isNotEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: _colorScheme.tertiaryContainer,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  '📍 Adjacent Winners (\$150 each)',
-                  style: GoogleFonts.rubik(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: _colorScheme.onTertiaryContainer,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 2),
-                Column(
-                  children: winners['adjacent']!.map<Widget>((winner) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 1),
-                    child: Text(
-                      winner,
-                      style: GoogleFonts.rubik(
-                        fontSize: 9,
-                        color: _colorScheme.onTertiaryContainer,
+            
+            const SizedBox(height: 4),
+            
+            // Adjacent and Diagonal winners side by side
+            if ((winners['adjacent'] != null && winners['adjacent']!.isNotEmpty) ||
+                (winners['diagonal'] != null && winners['diagonal']!.isNotEmpty))
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Adjacent winners
+                  if (winners['adjacent'] != null && winners['adjacent']!.isNotEmpty)
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: _colorScheme.tertiaryContainer,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              '📍 Adjacent (\$150)',
+                              style: GoogleFonts.rubik(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: _colorScheme.onTertiaryContainer,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 2),
+                            ...winners['adjacent']!.map<Widget>((winner) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 1),
+                              child: Text(
+                                winner,
+                                style: GoogleFonts.rubik(
+                                  fontSize: 12,
+                                  color: _colorScheme.onTertiaryContainer,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            )).toList(),
+                          ],
+                        ),
                       ),
-                      textAlign: TextAlign.center,
                     ),
-                  )).toList(),
-                ),
-              ],
-            ),
-          ),
-        
-        const SizedBox(height: 2),
-        
-        // Diagonal winners
-        if (winners['diagonal'] != null && winners['diagonal']!.isNotEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: _colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  '🔷 Diagonal Winners (\$100 each)',
-                  style: GoogleFonts.rubik(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: _colorScheme.onSecondaryContainer,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 2),
-                Column(
-                  children: winners['diagonal']!.map<Widget>((winner) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 1),
-                    child: Text(
-                      winner,
-                      style: GoogleFonts.rubik(
-                        fontSize: 9,
-                        color: _colorScheme.onSecondaryContainer,
+                  
+                  if (winners['adjacent'] != null && winners['adjacent']!.isNotEmpty &&
+                      winners['diagonal'] != null && winners['diagonal']!.isNotEmpty)
+                    const SizedBox(width: 8),
+                  
+                  // Diagonal winners
+                  if (winners['diagonal'] != null && winners['diagonal']!.isNotEmpty)
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: _colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              '🔷 Diagonal (\$100)',
+                              style: GoogleFonts.rubik(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: _colorScheme.onSecondaryContainer,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 2),
+                            ...winners['diagonal']!.map<Widget>((winner) => Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 1),
+                              child: Text(
+                                winner,
+                                style: GoogleFonts.rubik(
+                                  fontSize: 12,
+                                  color: _colorScheme.onSecondaryContainer,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            )).toList(),
+                          ],
+                        ),
                       ),
-                      textAlign: TextAlign.center,
                     ),
-                  )).toList(),
+                ],
+              ),
+            
+            const SizedBox(height: 4),
+            
+            // Total payout
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _colorScheme.surfaceVariant,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '💰 Total Payout: \$${_calculateTotalPayout(winners)}',
+                style: GoogleFonts.rubik(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: _colorScheme.onSurfaceVariant,
                 ),
-              ],
+                textAlign: TextAlign.center,
+              ),
             ),
-          ),
-        
-        const SizedBox(height: 2),
-        
-        // Total payout
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          decoration: BoxDecoration(
-            color: _colorScheme.surfaceVariant,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            '💰 Total: \$${_calculateTotalPayout(winners)}',
-            style: GoogleFonts.rubik(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: _colorScheme.onSurfaceVariant,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ],
+          ],
     );
       },
     );
@@ -1386,24 +1436,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   icon: const Icon(Icons.clear_all, size: 16),
                   label: const Text('Clear All Scores'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _secondaryColor,
-                    foregroundColor: Colors.white,
+                    backgroundColor: _errorColor,
+                    foregroundColor: _colorScheme.onError,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4, // Back to 4 columns for smaller boxes
-                childAspectRatio: 0.6, // Much taller to accommodate winner details
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-              ),
-              itemCount: 4,
-              itemBuilder: (context, index) {
+            Column(
+              children: List.generate(4, (index) {
                 final quarter = index + 1;
                 final score = _quarterScores.firstWhere(
                   (s) => s.quarter == quarter,
@@ -1416,66 +1457,84 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 );
                 final hasScore = score.id.isNotEmpty;
 
-                return Card(
-                  elevation: 1,
-                  color: hasScore ? _colorScheme.primaryContainer : _colorScheme.surfaceVariant,
-                  child: InkWell(
-                    onTap: () => _showQuarterScoreDialog(quarter),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Column(
+                return Container(
+                  width: double.infinity, // Full width for each card
+                  margin: const EdgeInsets.only(bottom: 12.0),
+                  child: Card(
+                    elevation: 1,
+                    color: hasScore ? _colorScheme.primaryContainer : _colorScheme.surfaceVariant,
+                    child: InkWell(
+                      onTap: () => _showQuarterScoreDialog(quarter),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                        child: Column(
                         children: [
-                          Text(
-                            'Q$quarter',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Q$quarter',
+                                style: const TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (hasScore)
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit, size: 16),
+                                      onPressed: () => _showQuarterScoreDialog(quarter),
+                                      tooltip: 'Edit Score',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.clear, size: 16),
+                                      onPressed: () => _clearQuarterScore(quarter),
+                                      tooltip: 'Clear Score',
+                                      color: _errorColor,
+                                    ),
+                                  ],
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 8),
                           if (hasScore) ...[
-                            Text(
-                              'Home: ${score.homeScore}',
-                              style: GoogleFonts.rubik(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            Text(
-                              'Away: ${score.awayScore}',
-                              style: GoogleFonts.rubik(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Winner: ${score.homeLastDigit}-${score.awayLastDigit}',
-                              style: GoogleFonts.rubik(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: _primaryColor,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Expanded(
-                              child: SingleChildScrollView(
-                                child: _buildQuarterWinnersInfo(quarter, score),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit, size: 16),
-                                  onPressed: () => _showQuarterScoreDialog(quarter),
-                                  tooltip: 'Edit Score',
+                                Expanded(
+                                  flex: 2,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Home: ${score.homeScore}',
+                                        style: GoogleFonts.rubik(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Away: ${score.awayScore}',
+                                        style: GoogleFonts.rubik(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Winner: ${score.homeLastDigit}-${score.awayLastDigit}',
+                                        style: GoogleFonts.rubik(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: _primaryColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.clear, size: 16),
-                                  onPressed: () => _clearQuarterScore(quarter),
-                                  tooltip: 'Clear Score',
+                                Expanded(
+                                  flex: 3,
+                                  child: _buildQuarterWinnersInfo(quarter, score),
                                 ),
                               ],
                             ),
@@ -1495,12 +1554,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               ),
                             ),
                           ],
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 );
-              },
+              }),
             ),
           ],
         ),
@@ -1509,69 +1569,78 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildUsersTable() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return SizedBox(
+      width: double.infinity,
+      child: Card(
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'User Details',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                SizedBox(
-                  width: 200,
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: const InputDecoration(
-                      hintText: 'Search users...',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                const Text(
+                  'User Details',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 200,
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: const InputDecoration(
+                          hintText: 'Search users...',
+                          prefixIcon: Icon(Icons.search),
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Text('Filter: ', style: TextStyle(fontSize: 16, color: _onSurfaceVariantColor)),
-                DropdownButton<String>(
-                  value: _sortFilter,
-                  onChanged: (value) => _updateFilter(value!),
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('All Users')),
-                    DropdownMenuItem(value: 'paid', child: Text('Paid Only')),
-                    DropdownMenuItem(value: 'unpaid', child: Text('Unpaid Only')),
+                    const SizedBox(width: 16),
+                    Text('Filter: ', style: TextStyle(fontSize: 16, color: _onSurfaceVariantColor)),
+                    DropdownButton<String>(
+                      value: _sortFilter,
+                      onChanged: (value) => _updateFilter(value!),
+                      items: const [
+                        DropdownMenuItem(value: 'all', child: Text('All Users')),
+                        DropdownMenuItem(value: 'paid', child: Text('Paid Only')),
+                        DropdownMenuItem(value: 'unpaid', child: Text('Unpaid Only')),
+                      ],
+                    ),
+                    const SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: _showCreateUserDialog,
+                      icon: const Icon(Icons.person_add),
+                      label: const Text('Create User'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primaryColor,
+                        foregroundColor: _colorScheme.onPrimary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _loadUsers,
+                      icon: const Icon(Icons.refresh),
+                      tooltip: 'Refresh',
+                    ),
                   ],
-                ),
-                const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  onPressed: _showCreateUserDialog,
-                  icon: const Icon(Icons.person_add),
-                  label: const Text('Create User'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primaryColor,
-                    foregroundColor: _colorScheme.onPrimary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _loadUsers,
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Refresh',
                 ),
               ],
             ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Card(
-          elevation: 2,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              columns: const [
+            const SizedBox(height: 16),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: MediaQuery.of(context).size.width - 64, // Account for padding
+                ),
+                child: DataTable(
+                  columnSpacing: 24,
+                columns: const [
                 DataColumn(label: Text('Display Name')),
                 DataColumn(label: Text('Email')),
                 DataColumn(label: Text('Entries')),
@@ -1610,9 +1679,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                     DataCell(
                       Text(
-                        user.createdAt != null 
-                            ? '${user.createdAt!.month}/${user.createdAt!.day}/${user.createdAt!.year}'
-                            : '-',
+                        DateFormatter.formatDate(user.createdAt),
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
@@ -1644,10 +1711,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ],
                 );
               }).toList(),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
+      ),
     );
   }
 }

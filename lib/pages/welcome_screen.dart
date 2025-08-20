@@ -1,3 +1,4 @@
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/user_service.dart';
@@ -8,6 +9,14 @@ class WelcomeScreen extends StatelessWidget {
   final UserModel user;
 
   const WelcomeScreen({super.key, required this.user});
+
+  static void _logout() {
+    // Clear localStorage
+    html.window.localStorage.remove('sb_squares_user');
+    
+    // Use a simple page refresh approach for web
+    html.window.location.reload();
+  }
 
   void _navigateToGame(BuildContext context) async {
     // Mark that the user has seen the instructions
@@ -67,6 +76,11 @@ class WelcomeScreen extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+          IconButton(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
           ),
         ],
       ),
