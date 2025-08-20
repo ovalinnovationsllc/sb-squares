@@ -14,16 +14,14 @@ A Flutter web application for managing Super Bowl squares games with Firebase ba
 
 ### 1. Firebase Configuration
 
-**Important**: This project requires Firebase configuration that is not included in the repository for security reasons.
+**Important**: Firebase configuration files are excluded from version control for security. See [FIREBASE_SETUP.md](FIREBASE_SETUP.md) for detailed setup instructions.
 
-1. Copy the template file:
-   ```bash
-   cp lib/firebase_options.dart.template lib/firebase_options.dart
-   ```
-
-2. Replace the placeholder values in `lib/firebase_options.dart` with your actual Firebase project configuration:
-   - Get your config from the Firebase Console → Project Settings → General → Your apps
-   - Replace `YOUR_WEB_API_KEY_HERE`, `YOUR_PROJECT_ID_HERE`, etc. with actual values
+Quick Setup:
+1. Get Firebase configuration files from project administrator or create your own Firebase project
+2. Place configuration files:
+   - Android: `android/app/google-services.json`
+   - iOS: `ios/Runner/GoogleService-Info.plist`
+   - Web: Run `flutterfire configure` to generate `lib/firebase_options.dart`
 
 3. Update Firestore security rules in Firebase Console:
    ```javascript

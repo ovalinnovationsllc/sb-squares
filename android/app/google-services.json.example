@@ -1,13 +1,14 @@
 {
   "project_info": {
-    "project_number": "741761946381",
-    "project_id": "sb-squares-100ee",
-    "storage_bucket": "sb-squares-100ee.firebasestorage.app"
+    "project_number": "YOUR_PROJECT_NUMBER",
+    "firebase_url": "YOUR_FIREBASE_URL",
+    "project_id": "YOUR_PROJECT_ID",
+    "storage_bucket": "YOUR_STORAGE_BUCKET"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:741761946381:android:04dc5528d742e5ce15d644",
+        "mobilesdk_app_id": "YOUR_MOBILE_SDK_APP_ID",
         "android_client_info": {
           "package_name": "com.llc.sb_squares"
         }
@@ -15,7 +16,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyB0sF7fd8o79G68YwJbP7R_TMrJsfX7TLU"
+          "current_key": "YOUR_API_KEY"
         }
       ],
       "services": {
