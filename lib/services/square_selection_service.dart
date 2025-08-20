@@ -4,6 +4,21 @@ import '../models/square_selection_model.dart';
 class SquareSelectionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'square_selections';
+  
+  // Stream for real-time updates
+  Stream<List<SquareSelectionModel>> selectionsStream() {
+    return _firestore
+        .collection(_collection)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return SquareSelectionModel.fromFirestore(
+          doc.data(),
+          doc.id,
+        );
+      }).toList();
+    });
+  }
 
   // Get all selections for a specific quarter
   Future<List<SquareSelectionModel>> getQuarterSelections(int quarter) async {
@@ -73,7 +88,7 @@ class SquareSelectionService {
     }
   }
 
-  // Add or update a square selection
+  // Add or update a square selection with transaction for collision prevention
   Future<bool> saveSelection({
     required int quarter,
     required int row,
@@ -84,51 +99,53 @@ class SquareSelectionService {
     try {
       final compositeKey = 'Q$quarter-$row-$col';
       
-      // Check if this square is already taken
-      final existing = await _firestore
-          .collection(_collection)
-          .where('compositeKey', isEqualTo: compositeKey)
-          .limit(1)
-          .get();
+      // Use a transaction to prevent race conditions
+      return await _firestore.runTransaction<bool>((transaction) async {
+        // First, check if this square is already taken
+        final querySnapshot = await _firestore
+            .collection(_collection)
+            .where('compositeKey', isEqualTo: compositeKey)
+            .limit(1)
+            .get();
 
-      if (existing.docs.isNotEmpty) {
-        // Square already taken by someone
-        final existingSelection = SquareSelectionModel.fromFirestore(
-          existing.docs.first.data() as Map<String, dynamic>,
-          existing.docs.first.id,
-        );
-        
-        if (existingSelection.userId != userId) {
-          print('Square already taken by another user');
-          return false;
+        if (querySnapshot.docs.isNotEmpty) {
+          // Square already exists
+          final existingDoc = querySnapshot.docs.first;
+          final existingSelection = SquareSelectionModel.fromFirestore(
+            existingDoc.data(),
+            existingDoc.id,
+          );
+          
+          if (existingSelection.userId != userId) {
+            // Square taken by another user - transaction will fail
+            print('Square already taken by ${existingSelection.userName}');
+            return false;
+          }
+          
+          // User is deselecting their own square
+          transaction.delete(existingDoc.reference);
+          print('Square deselected in transaction');
+          return true;
         }
-        
-        // User is deselecting their own square
-        await existing.docs.first.reference.delete();
-        print('Square deselected');
+
+        // Square is available - create new selection
+        final docRef = _firestore.collection(_collection).doc();
+        final selection = SquareSelectionModel(
+          id: docRef.id,
+          quarter: quarter,
+          row: row,
+          col: col,
+          userId: userId,
+          userName: userName,
+          selectedAt: DateTime.now(),
+        );
+
+        transaction.set(docRef, selection.toFirestore());
+        print('Square selected in transaction: Q$quarter ($row,$col) by $userName');
         return true;
-      }
-
-      // Don't delete existing selections - users can have multiple squares per quarter
-      // based on their numEntries value
-
-      // Create new selection
-      final docRef = _firestore.collection(_collection).doc();
-      final selection = SquareSelectionModel(
-        id: docRef.id,
-        quarter: quarter,
-        row: row,
-        col: col,
-        userId: userId,
-        userName: userName,
-        selectedAt: DateTime.now(),
-      );
-
-      await docRef.set(selection.toFirestore());
-      print('Square selected: Q$quarter ($row,$col) by $userName');
-      return true;
+      });
     } catch (e) {
-      print('Error saving selection: $e');
+      print('Transaction error saving selection: $e');
       return false;
     }
   }
@@ -217,6 +234,28 @@ class SquareSelectionService {
     } catch (e) {
       print('Error getting selection counts: $e');
       return {1: 0, 2: 0, 3: 0, 4: 0};
+    }
+  }
+
+  // Check if all squares are filled (100 squares per quarter)
+  Future<bool> isBoardFull() async {
+    try {
+      final counts = await getSelectionCounts();
+      return counts.values.every((count) => count >= 100);
+    } catch (e) {
+      print('Error checking if board is full: $e');
+      return false;
+    }
+  }
+
+  // Get total number of selections across all quarters
+  Future<int> getTotalSelections() async {
+    try {
+      final counts = await getSelectionCounts();
+      return counts.values.fold<int>(0, (sum, count) => sum + count);
+    } catch (e) {
+      print('Error getting total selections: $e');
+      return 0;
     }
   }
 }

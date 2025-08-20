@@ -4,6 +4,23 @@ import '../models/game_score_model.dart';
 class GameScoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'game_scores';
+  
+  // Stream for real-time score updates
+  Stream<List<GameScoreModel>> scoresStream() {
+    return _firestore
+        .collection(_collection)
+        .where('isActive', isEqualTo: true)
+        .orderBy('quarter')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return GameScoreModel.fromFirestore(
+          doc.data(),
+          doc.id,
+        );
+      }).toList();
+    });
+  }
 
   // Create or update a quarter score
   Future<bool> setQuarterScore({

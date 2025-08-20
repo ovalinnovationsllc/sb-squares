@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,6 +8,7 @@ import 'firebase_options.dart';
 import 'config/security_config.dart';
 import 'models/user_model.dart';
 import 'services/user_service.dart';
+import 'services/game_config_service.dart';
 import 'pages/admin_dashboard.dart';
 import 'pages/welcome_screen.dart';
 import 'pages/squares_game_page.dart';
@@ -18,6 +21,11 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // Initialize game configuration if it doesn't exist
+  final configService = GameConfigService();
+  await configService.createDefaultConfig();
+  
   runApp(const MyApp());
 }
 
@@ -66,6 +74,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   bool _userExists = false;
   UserModel? _currentUser;
   Timer? _debounceTimer;
+  Timer? _errorClearTimer;
 
   @override
   void initState() {
@@ -75,7 +84,8 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
       vsync: this,
     );
     
-    _emailController.addListener(_onEmailChanged);
+    // Add listener for UI updates only (no validation)
+    _emailController.addListener(_onEmailTextChanged);
     
     _fadeAnimation = Tween<double>(
       begin: 0.0,
@@ -94,27 +104,88 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
     ));
     
     _controller.forward();
+    
+    // Check for saved authentication on startup
+    _checkSavedAuthentication();
   }
 
   @override
   void dispose() {
+    // Cancel timers to prevent setState() after dispose
     _debounceTimer?.cancel();
+    _errorClearTimer?.cancel();
+    
+    // Dispose controllers and animations
     _controller.dispose();
     _emailController.dispose();
     super.dispose();
   }
   
-  void _onEmailChanged() {
-    // Cancel the previous timer if user is still typing
-    _debounceTimer?.cancel();
-    
-    // Start a new timer that will trigger validation after 800ms of no typing
-    _debounceTimer = Timer(const Duration(milliseconds: 800), () {
-      _validateEmail();
+  void _onEmailTextChanged() {
+    // Just update UI state when text changes - no validation
+    setState(() {
+      // Clear any existing errors when user starts typing again
+      if (_emailError != null) {
+        _emailError = null;
+        _isEmailValid = false;
+        _userExists = false;
+        _currentUser = null;
+      }
     });
   }
 
-  void _validateEmail() async {
+  // Save user authentication to localStorage
+  void _saveUserToLocalStorage(UserModel user) {
+    try {
+      final userJson = jsonEncode(user.toJson());
+      html.window.localStorage['sb_squares_user'] = userJson;
+      print('User saved to localStorage');
+    } catch (e) {
+      print('Error saving user to localStorage: $e');
+    }
+  }
+
+  // Load user authentication from localStorage
+  UserModel? _loadUserFromLocalStorage() {
+    try {
+      final userJson = html.window.localStorage['sb_squares_user'];
+      if (userJson != null) {
+        final userData = jsonDecode(userJson) as Map<String, dynamic>;
+        return UserModel.fromJson(userData);
+      }
+    } catch (e) {
+      print('Error loading user from localStorage: $e');
+      // Clear corrupted data
+      html.window.localStorage.remove('sb_squares_user');
+    }
+    return null;
+  }
+
+  // Clear user authentication from localStorage
+  void _clearUserFromLocalStorage() {
+    html.window.localStorage.remove('sb_squares_user');
+    print('User cleared from localStorage');
+  }
+
+  // Check for saved authentication on app startup
+  void _checkSavedAuthentication() {
+    final savedUser = _loadUserFromLocalStorage();
+    if (savedUser != null) {
+      setState(() {
+        _currentUser = savedUser;
+        _emailController.text = savedUser.email;
+        _isEmailValid = true;
+        _userExists = true;
+      });
+      
+      // Auto-navigate to the appropriate page
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _navigateToGame();
+      });
+    }
+  }
+
+  Future<void> _validateEmail() async {
     final email = _emailController.text.trim().toLowerCase();
     final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
     
@@ -165,6 +236,9 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
           if (user.numEntries >= 100) {
             _emailError = 'Maximum entries reached for this account.';
             _isEmailValid = false;
+          } else {
+            // Save user to localStorage for persistence across page refreshes
+            _saveUserToLocalStorage(user);
           }
         }
       });
@@ -176,6 +250,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
         _currentUser = null;
         _emailError = 'Error checking database. Please try again.';
       });
+      
       print('Error checking user in Firestore: $e');
     }
   }
@@ -255,8 +330,10 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                       enabled: !_isCheckingDatabase,
                                       maxLength: 100,
                                       style: const TextStyle(color: Colors.white),
-                                      onSubmitted: (value) {
-                                        // Only navigate if email is valid and user pressed Enter
+                                      onSubmitted: (value) async {
+                                        // Validate email when user presses Enter
+                                        await _validateEmail();
+                                        // Navigate if validation passed
                                         if (_isEmailValid && _currentUser != null) {
                                           _navigateToGame();
                                         }
@@ -335,10 +412,19 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                               ),
                               const SizedBox(height: 30),
                               ElevatedButton(
-                                onPressed: _isEmailValid ? _navigateToGame : null,
+                                onPressed: _emailController.text.isNotEmpty && !_isCheckingDatabase 
+                                    ? () async {
+                                        // Validate email when user clicks button  
+                                        await _validateEmail();
+                                        // Navigate if validation passed
+                                        if (_isEmailValid && _currentUser != null) {
+                                          _navigateToGame();
+                                        }
+                                      }
+                                    : null,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: _isEmailValid ? Colors.amber : Colors.grey,
-                                  foregroundColor: _isEmailValid ? Colors.black : Colors.white60,
+                                  backgroundColor: _emailController.text.isNotEmpty && !_isCheckingDatabase ? Colors.amber : Colors.grey,
+                                  foregroundColor: _emailController.text.isNotEmpty && !_isCheckingDatabase ? Colors.black : Colors.white60,
                                   padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 20),
                                   textStyle: const TextStyle(
                                     fontSize: 20,

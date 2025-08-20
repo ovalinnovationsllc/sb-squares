@@ -1,10 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
 import '../models/game_score_model.dart';
 import '../models/square_selection_model.dart';
+import '../models/board_numbers_model.dart';
+import '../models/game_config_model.dart';
 import '../services/game_score_service.dart';
 import '../services/square_selection_service.dart';
+import '../services/board_numbers_service.dart';
+import '../services/game_config_service.dart';
 import '../widgets/footer_widget.dart';
 import 'admin_dashboard.dart';
 
@@ -21,8 +26,15 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   late TabController _tabController;
   final GameScoreService _gameScoreService = GameScoreService();
   final SquareSelectionService _selectionService = SquareSelectionService();
-  final List<int> awayTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-  final List<int> homeTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  final BoardNumbersService _boardNumbersService = BoardNumbersService();
+  final GameConfigService _configService = GameConfigService();
+  List<int> awayTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  List<int> homeTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+  BoardNumbersModel? _currentBoardNumbers;
+  
+  // Team names from config
+  String _homeTeamName = 'AFC';
+  String _awayTeamName = 'NFC';
   
   // Separate selected squares for each quarter
   final Map<String, String> q1SelectedSquares = {};
@@ -35,72 +47,111 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   // Quarter scores for highlighting winners
   List<GameScoreModel> _quarterScores = [];
   
+  // Stream subscriptions for real-time updates
+  StreamSubscription<List<SquareSelectionModel>>? _selectionsSubscription;
+  StreamSubscription<List<GameScoreModel>>? _scoresSubscription;
+  StreamSubscription<BoardNumbersModel?>? _boardNumbersSubscription;
+  StreamSubscription<GameConfigModel>? _configSubscription;
+  
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _loadQuarterScores();
-    _loadSelections();
-  }
-  
-  Future<void> _loadQuarterScores() async {
-    try {
-      final scores = await _gameScoreService.getAllQuarterScores();
-      setState(() {
-        _quarterScores = scores;
-      });
-    } catch (e) {
-      print('Error loading quarter scores: $e');
-    }
-  }
-  
-  Future<void> _loadSelections() async {
-    setState(() => _isLoadingSelections = true);
     
-    try {
-      final allSelections = await _selectionService.getAllSelections();
-      
-      print('Loaded selections from Firestore:');
-      print('Q1: ${allSelections[1]?.length ?? 0} selections');
-      print('Q2: ${allSelections[2]?.length ?? 0} selections');
-      print('Q3: ${allSelections[3]?.length ?? 0} selections');
-      print('Q4: ${allSelections[4]?.length ?? 0} selections');
-      
-      setState(() {
-        // Clear existing selections
-        q1SelectedSquares.clear();
-        q2SelectedSquares.clear();
-        q3SelectedSquares.clear();
-        q4SelectedSquares.clear();
-        
-        // Load selections for each quarter
-        for (final selection in allSelections[1] ?? []) {
-          q1SelectedSquares[selection.squareKey] = selection.userName;
-          print('Q1: Adding ${selection.userName} at ${selection.squareKey}');
-        }
-        for (final selection in allSelections[2] ?? []) {
-          q2SelectedSquares[selection.squareKey] = selection.userName;
-          print('Q2: Adding ${selection.userName} at ${selection.squareKey}');
-        }
-        for (final selection in allSelections[3] ?? []) {
-          q3SelectedSquares[selection.squareKey] = selection.userName;
-          print('Q3: Adding ${selection.userName} at ${selection.squareKey}');
-        }
-        for (final selection in allSelections[4] ?? []) {
-          q4SelectedSquares[selection.squareKey] = selection.userName;
-          print('Q4: Adding ${selection.userName} at ${selection.squareKey}');
-        }
-        
-        _isLoadingSelections = false;
-      });
-    } catch (e) {
-      print('Error loading selections: $e');
-      setState(() => _isLoadingSelections = false);
-    }
+    // Set up real-time stream subscriptions
+    _setupStreamListeners();
   }
+  
+  void _setupStreamListeners() {
+    // Listen to selections stream
+    _selectionsSubscription = _selectionService.selectionsStream().listen(
+      (selections) {
+        if (mounted) {
+          setState(() {
+            // Clear existing selections
+            q1SelectedSquares.clear();
+            q2SelectedSquares.clear();
+            q3SelectedSquares.clear();
+            q4SelectedSquares.clear();
+            
+            // Update with real-time data
+            for (final selection in selections) {
+              final map = _getQuarterMap(selection.quarter);
+              map[selection.squareKey] = selection.userName;
+            }
+            
+            _isLoadingSelections = false;
+          });
+          
+        }
+      },
+      onError: (error) {
+        print('Error in selections stream: $error');
+      },
+    );
+
+    // Listen to scores stream
+    _scoresSubscription = _gameScoreService.scoresStream().listen(
+      (scores) {
+        if (mounted) {
+          setState(() {
+            _quarterScores = scores;
+          });
+        }
+      },
+      onError: (error) {
+        print('Error in scores stream: $error');
+      },
+    );
+
+    // Listen to board numbers stream
+    _boardNumbersSubscription = _boardNumbersService.boardNumbersStream().listen(
+      (boardNumbers) {
+        if (mounted) {
+          setState(() {
+            _currentBoardNumbers = boardNumbers;
+            if (boardNumbers != null) {
+              homeTeamNumbers = boardNumbers.homeNumbers;
+              awayTeamNumbers = boardNumbers.awayNumbers;
+            } else {
+              // Reset to default (will be hidden in UI)
+              homeTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+              awayTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+            }
+          });
+        }
+      },
+      onError: (error) {
+        print('🚨 Error in board numbers stream: $error');
+      },
+    );
+
+    // Listen to config stream
+    _configSubscription = _configService.configStream().listen(
+      (config) {
+        if (mounted) {
+          setState(() {
+            _homeTeamName = config.homeTeamName;
+            _awayTeamName = config.awayTeamName;
+          });
+        }
+      },
+      onError: (error) {
+        print('Error in config stream: $error');
+      },
+    );
+  }
+  
+  
   
   @override
   void dispose() {
+    // Cancel all stream subscriptions to prevent setState() after dispose
+    _selectionsSubscription?.cancel();
+    _scoresSubscription?.cancel();
+    _boardNumbersSubscription?.cancel();
+    _configSubscription?.cancel();
+    
     _tabController.dispose();
     super.dispose();
   }
@@ -165,8 +216,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     print('Save result: $success');
     
     if (success) {
-      // Reload selections to ensure sync with Firestore
-      await _loadSelections();
+      // Real-time updates will automatically sync the UI
       
       // Show feedback
       if (isDeselecting) {
@@ -235,29 +285,62 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
       orElse: () => GameScoreModel(id: '', quarter: quarter, homeScore: 0, awayScore: 0),
     );
     
-    if (score.id.isEmpty) return 'normal'; // No score set yet
+    if (score.id.isEmpty || _currentBoardNumbers == null) return 'normal'; // No score set yet or no board numbers
     
-    final homeDigit = score.homeLastDigit;
-    final awayDigit = score.awayLastDigit;
+    final homeScoreDigit = score.homeLastDigit;
+    final awayScoreDigit = score.awayLastDigit;
+    
+    // Find the grid coordinates that correspond to these score digits  
+    // Use the same arrays that are used for visual display
+    final homeNumbers = homeTeamNumbers;
+    final awayNumbers = awayTeamNumbers;
+    
+    // Find which grid position corresponds to the score digits
+    int? homeRow, awayCol;
+    
+    for (int i = 0; i < homeNumbers.length; i++) {
+      if (homeNumbers[i] == homeScoreDigit) {
+        homeRow = i;
+        break;
+      }
+    }
+    
+    for (int i = 0; i < awayNumbers.length; i++) {
+      if (awayNumbers[i] == awayScoreDigit) {
+        awayCol = i;
+        break;
+      }
+    }
+    
+    // Debug logging (reduced)
+    if (homeRow != null && awayCol != null && row == homeRow && col == awayCol) {
+      print('🎮 Q$quarter Winner at Grid ($row,$col): ${homeNumbers[row]}-${awayNumbers[col]}');
+    }
+    
+    if (homeRow == null || awayCol == null) {
+      // Score digits not found in board numbers - shouldn't happen
+      return 'normal';
+    }
     
     // Check if this is the winning square
-    if (row == homeDigit && col == awayDigit) {
+    if (row == homeRow && col == awayCol) {
+      print('✅ WINNER FOUND at Grid ($row,$col) - Numbers: ${homeNumbers[row]}-${awayNumbers[col]}');
       return 'winner';
     }
     
-    // Check if this is an adjacent square (up, down, left, right)
-    if ((row == (homeDigit + 1) % 10 && col == awayDigit) || // down
-        (row == (homeDigit - 1 + 10) % 10 && col == awayDigit) || // up
-        (row == homeDigit && col == (awayDigit + 1) % 10) || // right
-        (row == homeDigit && col == (awayDigit - 1 + 10) % 10)) { // left
+    // Check if this is an adjacent square (up, down, left, right) - wrapping around edges
+    if ((row == (homeRow + 1) % 10 && col == awayCol) || // down
+        (row == (homeRow - 1 + 10) % 10 && col == awayCol) || // up
+        (row == homeRow && col == (awayCol + 1) % 10) || // right
+        (row == homeRow && col == (awayCol - 1 + 10) % 10)) { // left
       return 'adjacent';
     }
     
-    // Check if this is a diagonal square
-    if ((row == (homeDigit + 1) % 10 && col == (awayDigit + 1) % 10) || // down-right
-        (row == (homeDigit + 1) % 10 && col == (awayDigit - 1 + 10) % 10) || // down-left
-        (row == (homeDigit - 1 + 10) % 10 && col == (awayDigit + 1) % 10) || // up-right
-        (row == (homeDigit - 1 + 10) % 10 && col == (awayDigit - 1 + 10) % 10)) { // up-left
+    // Check if this is a diagonal square - wrapping around edges
+    if ((row == (homeRow + 1) % 10 && col == (awayCol + 1) % 10) || // down-right
+        (row == (homeRow + 1) % 10 && col == (awayCol - 1 + 10) % 10) || // down-left
+        (row == (homeRow - 1 + 10) % 10 && col == (awayCol + 1) % 10) || // up-right
+        (row == (homeRow - 1 + 10) % 10 && col == (awayCol - 1 + 10) % 10)) { // up-left
       return 'diagonal';
     }
     
@@ -511,17 +594,16 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
         actions: [
           IconButton(
             onPressed: () async {
-              await _loadQuarterScores();
-              await _loadSelections();
+              // Real-time streams handle updates automatically
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Board refreshed'),
-                  duration: Duration(seconds: 1),
+                  content: Text('Board updates automatically in real-time'),
+                  duration: Duration(seconds: 2),
                 ),
               );
             },
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh',
+            icon: const Icon(Icons.sync),
+            tooltip: 'Real-time Sync',
           ),
           IconButton(
             onPressed: _showInstructions,
@@ -646,29 +728,53 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                       
                     return Stack(
                       children: [
+                        // Away team label (top, spread horizontally)
                         Positioned(
-                          top: 0,
+                          top: cellSize * 0.15,
                           left: cellSize,
                           child: SizedBox(
                             width: cellSize * 10,
-                            height: cellSize,
+                            height: cellSize * 0.4,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: _awayTeamName.toUpperCase().split('').map((letter) => 
+                                Text(
+                                  letter,
+                                  style: GoogleFonts.rubik(
+                                    fontSize: cellSize * 0.25,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade700,
+                                    height: 1.0,
+                                  ),
+                                ),
+                              ).toList(),
+                            ),
+                          ),
+                        ),
+                        
+                        Positioned(
+                          top: cellSize * 0.6,
+                          left: cellSize,
+                          child: SizedBox(
+                            width: cellSize * 10,
+                            height: cellSize * 0.4,
                             child: Row(
                               children: [
                                 for (int i = 0; i < 10; i++)
                                   Container(
                                     width: cellSize,
-                                    height: cellSize,
+                                    height: cellSize * 0.4,
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
                                       color: Colors.blue.shade100,
                                       border: Border.all(color: Colors.black),
                                     ),
                                     child: Text(
-                                      '${awayTeamNumbers[i]}',
+                                      _currentBoardNumbers != null ? '${awayTeamNumbers[i]}' : '?',
                                       style: GoogleFonts.rubik(
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: Colors.blue.shade700,
+                                        fontSize: 14,
+                                        color: _currentBoardNumbers != null ? Colors.blue.shade700 : Colors.grey,
                                       ),
                                     ),
                                   ),
@@ -677,17 +783,41 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                           ),
                         ),
                         
+                        // Home team label (left side, vertical)
+                        Positioned(
+                          top: cellSize * 1.2,
+                          left: cellSize * 0.1,
+                          child: SizedBox(
+                            width: cellSize * 0.4,
+                            height: cellSize * 9.6,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: _homeTeamName.toUpperCase().split('').map((letter) => 
+                                Text(
+                                  letter,
+                                  style: GoogleFonts.rubik(
+                                    fontSize: cellSize * 0.25,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red.shade700,
+                                    height: 1.0,
+                                  ),
+                                ),
+                              ).toList(),
+                            ),
+                          ),
+                        ),
+                        
                         Positioned(
                           top: cellSize,
-                          left: 0,
+                          left: cellSize * 0.6,
                           child: SizedBox(
-                            width: cellSize,
+                            width: cellSize * 0.4,
                             height: cellSize * 10,
                             child: Column(
                               children: [
                                 for (int i = 0; i < 10; i++)
                                   Container(
-                                    width: cellSize,
+                                    width: cellSize * 0.4,
                                     height: cellSize,
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
@@ -695,11 +825,11 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                       border: Border.all(color: Colors.black),
                                     ),
                                     child: Text(
-                                      '${homeTeamNumbers[i]}',
+                                      _currentBoardNumbers != null ? '${homeTeamNumbers[i]}' : '?',
                                       style: GoogleFonts.rubik(
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: Colors.red.shade700,
+                                        fontSize: 14,
+                                        color: _currentBoardNumbers != null ? Colors.red.shade700 : Colors.grey,
                                       ),
                                     ),
                                   ),
@@ -709,36 +839,16 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                         ),
                         
                         Positioned(
-                          top: 0,
-                          left: 0,
+                          top: cellSize * 0.6,
+                          left: cellSize * 0.6,
                           child: Container(
-                            width: cellSize,
-                            height: cellSize,
+                            width: cellSize * 0.4,
+                            height: cellSize * 0.4,
                             decoration: BoxDecoration(
                               color: Colors.grey.shade300,
                               border: Border.all(color: Colors.black),
                             ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'AWAY',
-                                  style: GoogleFonts.rubik(
-                                    fontSize: cellSize * 0.15,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue.shade700,
-                                  ),
-                                ),
-                                Text(
-                                  'HOME',
-                                  style: GoogleFonts.rubik(
-                                    fontSize: cellSize * 0.15,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.red.shade700,
-                                  ),
-                                ),
-                              ],
-                            ),
+                            child: const SizedBox(), // Empty corner
                           ),
                         ),
                         

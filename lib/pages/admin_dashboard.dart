@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
 import '../models/game_score_model.dart';
+import '../models/board_numbers_model.dart';
+import '../models/game_config_model.dart';
 import '../services/user_service.dart';
 import '../services/game_score_service.dart';
 import '../services/square_selection_service.dart';
+import '../services/board_numbers_service.dart';
+import '../services/game_config_service.dart';
 import '../widgets/footer_widget.dart';
 import '../widgets/user_form_dialog.dart';
 import 'welcome_screen.dart';
@@ -23,14 +27,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final UserService _userService = UserService();
   final GameScoreService _gameScoreService = GameScoreService();
   final SquareSelectionService _selectionService = SquareSelectionService();
+  final BoardNumbersService _boardNumbersService = BoardNumbersService();
+  final GameConfigService _configService = GameConfigService();
   final TextEditingController _searchController = TextEditingController();
   List<UserModel> _users = [];
   List<UserModel> _filteredUsers = [];
   List<GameScoreModel> _quarterScores = [];
+  BoardNumbersModel? _currentBoardNumbers;
+  GameConfigModel? _currentConfig;
   bool _isLoading = true;
   String? _error;
   String _sortFilter = 'all'; // 'all', 'paid', 'unpaid'
   String _searchQuery = '';
+  
+  // Theme-based color scheme
+  ColorScheme get _colorScheme => Theme.of(context).colorScheme;
+  Color get _primaryColor => _colorScheme.primary;
+  Color get _secondaryColor => _colorScheme.secondary;
+  Color get _surfaceColor => _colorScheme.surface;
+  Color get _errorColor => _colorScheme.error;
+  Color get _onSurfaceColor => _colorScheme.onSurface;
+  Color get _onSurfaceVariantColor => _colorScheme.onSurfaceVariant;
 
   @override
   void initState() {
@@ -61,10 +78,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
       
       final users = await _userService.getAllUsers();
       final quarterScores = await _gameScoreService.getAllQuarterScores();
+      final boardNumbers = await _boardNumbersService.getCurrentBoardNumbers();
+      final config = await _configService.getCurrentConfig();
       
       setState(() {
         _users = users;
         _quarterScores = quarterScores;
+        _currentBoardNumbers = boardNumbers;
+        _currentConfig = config;
         _applyFilter();
         _isLoading = false;
       });
@@ -155,7 +176,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: _errorColor),
             child: const Text('Delete'),
           ),
         ],
@@ -177,7 +198,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
+        backgroundColor: isError ? _errorColor : _primaryColor,
       ),
     );
   }
@@ -236,7 +257,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: _errorColor),
             child: const Text('Clear'),
           ),
         ],
@@ -271,7 +292,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: _errorColor),
             child: const Text('Clear All'),
           ),
         ],
@@ -352,22 +373,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const Text(
+                  Text(
                     'Administrator',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.white70,
+                      color: _colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.only(right: 8.0),
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
             child: Icon(
               Icons.admin_panel_settings,
-              color: Colors.amber,
+              color: _secondaryColor,
             ),
           ),
         ],
@@ -382,9 +403,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.error, size: 64, color: Colors.red),
+                            Icon(Icons.error, size: 64, color: _errorColor),
                             const SizedBox(height: 16),
-                            Text(_error!, style: const TextStyle(color: Colors.red)),
+                            Text(_error!, style: TextStyle(color: _errorColor)),
                             const SizedBox(height: 16),
                             ElevatedButton(
                               onPressed: _loadUsers,
@@ -403,7 +424,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             children: [
                               _buildSummaryList(),
                               const SizedBox(height: 24),
+                              _buildTeamNamesSection(),
+                              const SizedBox(height: 24),
                               _buildQuarterScoresSection(),
+                              const SizedBox(height: 24),
+                              _buildBoardNumbersSection(),
                               const SizedBox(height: 24),
                               _buildBoardManagementSection(),
                               const SizedBox(height: 24),
@@ -448,17 +473,193 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 Expanded(
                   child: Text(
                     'Paid: $_paidUsers',
-                    style: const TextStyle(fontSize: 16, color: Colors.green),
+                    style: TextStyle(fontSize: 16, color: _primaryColor),
                   ),
                 ),
                 Expanded(
                   child: Text(
                     'Unpaid: $_unpaidUsers',
-                    style: const TextStyle(fontSize: 16, color: Colors.red),
+                    style: TextStyle(fontSize: 16, color: _errorColor),
                   ),
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBoardNumbersSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Board Numbers',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                Row(
+                  children: [
+                    if (_currentBoardNumbers == null) ...[
+                      ElevatedButton.icon(
+                        onPressed: _randomizeBoardNumbers,
+                        icon: const Icon(Icons.shuffle, size: 16),
+                        label: const Text('Randomize Numbers'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _primaryColor,
+                          foregroundColor: _colorScheme.onSecondary,
+                        ),
+                      ),
+                    ] else ...[
+                      ElevatedButton.icon(
+                        onPressed: _randomizeBoardNumbers,
+                        icon: const Icon(Icons.shuffle, size: 16),
+                        label: const Text('Re-randomize'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _secondaryColor,
+                          foregroundColor: _colorScheme.onSecondary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: _clearBoardNumbers,
+                        icon: const Icon(Icons.clear, size: 16),
+                        label: const Text('Clear Numbers'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _secondaryColor,
+                          foregroundColor: _colorScheme.onSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_currentBoardNumbers != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _colorScheme.primaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _colorScheme.outline),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Numbers Randomized',
+                      style: GoogleFonts.rubik(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: _colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Randomized by: ${_currentBoardNumbers!.randomizedBy}',
+                      style: TextStyle(fontSize: 14, color: _onSurfaceVariantColor),
+                    ),
+                    Text(
+                      'Date: ${_currentBoardNumbers!.randomizedAt?.toLocal().toString().split(' ')[0] ?? 'Unknown'}',
+                      style: TextStyle(fontSize: 14, color: _onSurfaceVariantColor),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Home Team:',
+                                style: GoogleFonts.rubik(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: _errorColor,
+                                ),
+                              ),
+                              Text(
+                                _currentBoardNumbers!.homeNumbers.join(', '),
+                                style: GoogleFonts.rubik(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 24),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Away Team:',
+                                style: GoogleFonts.rubik(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: _secondaryColor,
+                                ),
+                              ),
+                              Text(
+                                _currentBoardNumbers!.awayNumbers.join(', '),
+                                style: GoogleFonts.rubik(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _colorScheme.outline),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.shuffle, color: _colorScheme.onSecondaryContainer),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Numbers Not Yet Randomized',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: _colorScheme.onSecondaryContainer,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Players can select squares but numbers are hidden. Randomize when ready.',
+                            style: TextStyle(fontSize: 14, color: _onSurfaceVariantColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -487,8 +688,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       icon: const Icon(Icons.clear_all, size: 16),
                       label: const Text('Clear All Squares'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepOrange,
-                        foregroundColor: Colors.white,
+                        backgroundColor: _secondaryColor,
+                        foregroundColor: _colorScheme.onSecondary,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -497,8 +698,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       icon: const Icon(Icons.delete_forever, size: 16),
                       label: const Text('Clear All Users'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade700,
-                        foregroundColor: Colors.white,
+                        backgroundColor: _errorColor,
+                        foregroundColor: _colorScheme.onError,
                       ),
                     ),
                   ],
@@ -506,9 +707,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ],
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'Use this section to manage the game. Clear squares to remove selections, or clear all users to reset the entire system.',
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: _onSurfaceVariantColor),
             ),
           ],
         ),
@@ -533,7 +734,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: _errorColor),
             child: const Text('Clear All'),
           ),
         ],
@@ -568,7 +769,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade700),
+            style: ElevatedButton.styleFrom(backgroundColor: _errorColor),
             child: const Text('DELETE ALL USERS'),
           ),
         ],
@@ -592,7 +793,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(true),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900),
+              style: ElevatedButton.styleFrom(backgroundColor: _errorColor),
               child: const Text('YES, DELETE ALL'),
             ),
           ],
@@ -610,6 +811,559 @@ class _AdminDashboardState extends State<AdminDashboard> {
         }
       }
     }
+  }
+
+  void _randomizeBoardNumbers() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Randomize Board Numbers'),
+        content: const Text(
+          'This will randomly assign numbers 0-9 to the board.\n\n'
+          'Once randomized, all players will be able to see which numbers correspond to their squares.\n\n'
+          'Are you sure you want to randomize the board numbers?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+            child: const Text('Randomize Numbers'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await _boardNumbersService.randomizeBoardNumbers(
+        adminUserId: widget.currentUser.id,
+        adminName: widget.currentUser.displayName.isEmpty 
+            ? widget.currentUser.email 
+            : widget.currentUser.displayName,
+      );
+      
+      if (success) {
+        _showSnackBar('Board numbers randomized successfully!');
+        await _loadUsers(); // Reload to get updated board numbers
+      } else {
+        _showSnackBar('Failed to randomize board numbers', isError: true);
+      }
+    }
+  }
+
+  void _clearBoardNumbers() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear Board Numbers'),
+        content: const Text(
+          'This will remove the current number randomization.\n\n'
+          'The board will go back to showing "?" instead of numbers.\n\n'
+          'Are you sure you want to clear the board numbers?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: _secondaryColor),
+            child: const Text('Clear Numbers'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await _boardNumbersService.clearBoardNumbers();
+      
+      if (success) {
+        _showSnackBar('Board numbers cleared successfully');
+        await _loadUsers(); // Reload to get updated state
+      } else {
+        _showSnackBar('Failed to clear board numbers', isError: true);
+      }
+    }
+  }
+
+  Widget _buildTeamNamesSection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Team Names',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _colorScheme.outline),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Home Team',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _colorScheme.onErrorContainer,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _currentConfig?.homeTeamName ?? 'AFC',
+                          style: GoogleFonts.rubik(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: _colorScheme.onErrorContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _colorScheme.outline),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Away Team',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _colorScheme.onSecondaryContainer,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _currentConfig?.awayTeamName ?? 'NFC',
+                          style: GoogleFonts.rubik(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: _colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _showEditTeamNamesDialog,
+                      icon: const Icon(Icons.edit, size: 16),
+                      label: const Text('Edit Teams'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _colorScheme.tertiary,
+                        foregroundColor: _colorScheme.onTertiary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_currentConfig == null)
+                      ElevatedButton.icon(
+                        onPressed: _forceCreateConfig,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Create Config'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _secondaryColor,
+                          foregroundColor: _colorScheme.onSecondary,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _forceCreateConfig() async {
+    _showSnackBar('Creating config collection...', isError: false);
+    
+    try {
+      await _configService.forceInitializeConfig();
+      _showSnackBar('Config collection created successfully!');
+      await _loadUsers(); // Reload to show the new config
+    } catch (e) {
+      _showSnackBar('Failed to create config: $e', isError: true);
+    }
+  }
+
+  void _showEditTeamNamesDialog() {
+    final homeController = TextEditingController(text: _currentConfig?.homeTeamName ?? 'AFC');
+    final awayController = TextEditingController(text: _currentConfig?.awayTeamName ?? 'NFC');
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Team Names'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: homeController,
+              decoration: InputDecoration(
+                labelText: 'Home Team Name',
+                hintText: 'e.g., AFC, Steelers',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.home, color: _colorScheme.onErrorContainer),
+              ),
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 20,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: awayController,
+              decoration: InputDecoration(
+                labelText: 'Away Team Name',
+                hintText: 'e.g., NFC, Cowboys',
+                border: const OutlineInputBorder(),
+                prefixIcon: Icon(Icons.flight_takeoff, color: _colorScheme.onSecondaryContainer),
+              ),
+              textCapitalization: TextCapitalization.characters,
+              maxLength: 20,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final homeTeam = homeController.text.trim();
+              final awayTeam = awayController.text.trim();
+              
+              if (!_configService.validateTeamNames(homeTeam, awayTeam)) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: const Text('Team names must be between 1-20 characters'),
+                    backgroundColor: _errorColor,
+                  ),
+                );
+                return;
+              }
+              
+              Navigator.of(context).pop();
+              
+              final success = await _configService.updateTeamNames(
+                homeTeamName: homeTeam,
+                awayTeamName: awayTeam,
+                updatedBy: widget.currentUser.displayName.isEmpty 
+                    ? widget.currentUser.email 
+                    : widget.currentUser.displayName,
+              );
+              
+              if (success) {
+                _showSnackBar('Team names updated successfully!');
+                await _loadUsers();
+              } else {
+                _showSnackBar('Failed to update team names', isError: true);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: _colorScheme.tertiary),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuarterWinnersInfo(int quarter, GameScoreModel score) {
+    return FutureBuilder<Map<String, List<String>>>(
+      future: _getQuarterWinners(quarter, score),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const SizedBox(
+            height: 20,
+            width: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
+        }
+        
+        if (snapshot.hasError) {
+          return Text(
+            'Error loading winners',
+            style: TextStyle(fontSize: 10, color: _errorColor),
+          );
+        }
+        
+        final winners = snapshot.data ?? {};
+        if (winners.isEmpty) {
+          return Text(
+            'No winners found',
+            style: TextStyle(fontSize: 10, color: _onSurfaceVariantColor),
+          );
+        }
+
+        return Column(
+      children: [
+        // Winner (Main prize)
+        if (winners['winner'] != null && winners['winner']!.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: _colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '🏆 ${winners['winner']!.first} - \$2400',
+              style: GoogleFonts.rubik(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: _colorScheme.onPrimaryContainer,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        
+        const SizedBox(height: 2),
+        
+        // Adjacent winners
+        if (winners['adjacent'] != null && winners['adjacent']!.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: _colorScheme.tertiaryContainer,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  '📍 Adjacent Winners (\$150 each)',
+                  style: GoogleFonts.rubik(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: _colorScheme.onTertiaryContainer,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 2),
+                Column(
+                  children: winners['adjacent']!.map<Widget>((winner) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 1),
+                    child: Text(
+                      winner,
+                      style: GoogleFonts.rubik(
+                        fontSize: 9,
+                        color: _colorScheme.onTertiaryContainer,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )).toList(),
+                ),
+              ],
+            ),
+          ),
+        
+        const SizedBox(height: 2),
+        
+        // Diagonal winners
+        if (winners['diagonal'] != null && winners['diagonal']!.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: _colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  '🔷 Diagonal Winners (\$100 each)',
+                  style: GoogleFonts.rubik(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: _colorScheme.onSecondaryContainer,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 2),
+                Column(
+                  children: winners['diagonal']!.map<Widget>((winner) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 1),
+                    child: Text(
+                      winner,
+                      style: GoogleFonts.rubik(
+                        fontSize: 9,
+                        color: _colorScheme.onSecondaryContainer,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )).toList(),
+                ),
+              ],
+            ),
+          ),
+        
+        const SizedBox(height: 2),
+        
+        // Total payout
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          decoration: BoxDecoration(
+            color: _colorScheme.surfaceVariant,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            '💰 Total: \$${_calculateTotalPayout(winners)}',
+            style: GoogleFonts.rubik(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: _colorScheme.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ],
+    );
+      },
+    );
+  }
+
+  Future<Map<String, List<String>>> _getQuarterWinners(int quarter, GameScoreModel score) async {
+    final winners = {
+      'winner': <String>[],
+      'adjacent': <String>[],
+      'diagonal': <String>[],
+    };
+
+    if (score.id.isEmpty || _currentBoardNumbers == null) return winners;
+
+    // Get the last digits from the score
+    final homeScoreDigit = score.homeLastDigit;
+    final awayScoreDigit = score.awayLastDigit;
+    
+    // Find the grid coordinates that correspond to these score digits
+    final homeNumbers = _currentBoardNumbers!.homeNumbers;
+    final awayNumbers = _currentBoardNumbers!.awayNumbers;
+    
+    // Find which grid position corresponds to the score digits
+    int? homeRow, awayCol;
+    
+    for (int i = 0; i < homeNumbers.length; i++) {
+      if (homeNumbers[i] == homeScoreDigit) {
+        homeRow = i;
+        break;
+      }
+    }
+    
+    for (int i = 0; i < awayNumbers.length; i++) {
+      if (awayNumbers[i] == awayScoreDigit) {
+        awayCol = i;
+        break;
+      }
+    }
+    
+    // Debug logging (reduced)
+    if (homeRow != null && awayCol != null) {
+      print('🎯 Q$quarter Admin: Winner at Grid ($homeRow,$awayCol) for score ${score.homeScore}-${score.awayScore}');
+    }
+    
+    if (homeRow == null || awayCol == null) {
+      // Score digits not found in board numbers - shouldn't happen
+      return winners;
+    }
+
+    // Fetch all selections for this quarter
+    final quarterSelections = await _selectionService.getQuarterSelections(quarter);
+    
+    // Create a map of grid coordinates to user names
+    final Map<String, String> squareOwners = {};
+    for (final selection in quarterSelections) {
+      final key = '${selection.row}-${selection.col}';
+      squareOwners[key] = selection.userName;
+    }
+
+    // The winning square grid coordinate
+    final winningSquare = '$homeRow-$awayCol';
+    final winnerName = squareOwners[winningSquare];
+    if (winnerName != null) {
+      winners['winner']!.add('$winnerName ($homeScoreDigit-$awayScoreDigit)');
+    } else {
+      winners['winner']!.add('No owner ($homeScoreDigit-$awayScoreDigit)');
+    }
+    
+    // Calculate adjacent squares (wrapping around edges)
+    final adjacentSquares = [
+      '${(homeRow + 1) % 10}-$awayCol',     // down
+      '${(homeRow - 1 + 10) % 10}-$awayCol', // up
+      '$homeRow-${(awayCol + 1) % 10}',     // right
+      '$homeRow-${(awayCol - 1 + 10) % 10}', // left
+    ];
+    
+    // Calculate diagonal squares (wrapping around edges)
+    final diagonalSquares = [
+      '${(homeRow + 1) % 10}-${(awayCol + 1) % 10}',        // down-right
+      '${(homeRow + 1) % 10}-${(awayCol - 1 + 10) % 10}',   // down-left
+      '${(homeRow - 1 + 10) % 10}-${(awayCol + 1) % 10}',   // up-right
+      '${(homeRow - 1 + 10) % 10}-${(awayCol - 1 + 10) % 10}', // up-left
+    ];
+
+    // Convert grid coordinates to display format with actual user names
+    winners['adjacent'] = adjacentSquares.map((gridCoord) {
+      final parts = gridCoord.split('-');
+      final row = int.parse(parts[0]);
+      final col = int.parse(parts[1]);
+      final homeNum = homeNumbers[row];
+      final awayNum = awayNumbers[col];
+      final ownerName = squareOwners[gridCoord];
+      if (ownerName != null) {
+        return '$ownerName ($homeNum-$awayNum)';
+      } else {
+        return 'No owner ($homeNum-$awayNum)';
+      }
+    }).toList();
+    
+    winners['diagonal'] = diagonalSquares.map((gridCoord) {
+      final parts = gridCoord.split('-');
+      final row = int.parse(parts[0]);
+      final col = int.parse(parts[1]);
+      final homeNum = homeNumbers[row];
+      final awayNum = awayNumbers[col];
+      final ownerName = squareOwners[gridCoord];
+      if (ownerName != null) {
+        return '$ownerName ($homeNum-$awayNum)';
+      } else {
+        return 'No owner ($homeNum-$awayNum)';
+      }
+    }).toList();
+
+    return winners;
+  }
+
+  int _calculateTotalPayout(Map<String, List<String>> winners) {
+    int total = 0; // Calculate total payout for winners
+    total += (winners['winner']?.length ?? 0) * 2400; // Winner: $2400 each
+    total += (winners['adjacent']?.length ?? 0) * 150; // Adjacent: $150 each
+    total += (winners['diagonal']?.length ?? 0) * 100; // Diagonal: $100 each
+    return total;
   }
 
   Widget _buildQuarterScoresSection() {
@@ -632,7 +1386,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   icon: const Icon(Icons.clear_all, size: 16),
                   label: const Text('Clear All Scores'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
+                    backgroundColor: _secondaryColor,
                     foregroundColor: Colors.white,
                   ),
                 ),
@@ -643,10 +1397,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                childAspectRatio: 1.2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
+                crossAxisCount: 4, // Back to 4 columns for smaller boxes
+                childAspectRatio: 0.6, // Much taller to accommodate winner details
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
               ),
               itemCount: 4,
               itemBuilder: (context, index) {
@@ -664,18 +1418,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                 return Card(
                   elevation: 1,
-                  color: hasScore ? Colors.green.shade50 : Colors.grey.shade100,
+                  color: hasScore ? _colorScheme.primaryContainer : _colorScheme.surfaceVariant,
                   child: InkWell(
                     onTap: () => _showQuarterScoreDialog(quarter),
                     child: Padding(
                       padding: const EdgeInsets.all(8.0),
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             'Q$quarter',
                             style: const TextStyle(
-                              fontSize: 16,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -684,14 +1437,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             Text(
                               'Home: ${score.homeScore}',
                               style: GoogleFonts.rubik(
-                                fontSize: 12,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
                             Text(
                               'Away: ${score.awayScore}',
                               style: GoogleFonts.rubik(
-                                fontSize: 12,
+                                fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -699,9 +1452,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             Text(
                               'Winner: ${score.homeLastDigit}-${score.awayLastDigit}',
                               style: GoogleFonts.rubik(
-                                fontSize: 12,
+                                fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.green,
+                                color: _primaryColor,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Expanded(
+                              child: SingleChildScrollView(
+                                child: _buildQuarterWinnersInfo(quarter, score),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -721,17 +1480,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               ],
                             ),
                           ] else ...[
-                            const Icon(
+                            Icon(
                               Icons.add_circle_outline,
-                              size: 32,
-                              color: Colors.grey,
+                              size: 28,
+                              color: _onSurfaceVariantColor,
                             ),
                             const SizedBox(height: 4),
-                            const Text(
+                            Text(
                               'Set Score',
                               style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
+                                fontSize: 14,
+                                color: _onSurfaceVariantColor,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
@@ -775,7 +1535,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                 ),
                 const SizedBox(width: 16),
-                Text('Filter: ', style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                Text('Filter: ', style: TextStyle(fontSize: 16, color: _onSurfaceVariantColor)),
                 DropdownButton<String>(
                   value: _sortFilter,
                   onChanged: (value) => _updateFilter(value!),
@@ -791,8 +1551,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   icon: const Icon(Icons.person_add),
                   label: const Text('Create User'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
+                    backgroundColor: _primaryColor,
+                    foregroundColor: _colorScheme.onPrimary,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -830,13 +1590,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: user.hasPaid ? Colors.green : Colors.red,
+                          color: user.hasPaid ? _primaryColor : _errorColor,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
                           user.hasPaid ? 'Paid' : 'Unpaid',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: _colorScheme.onPrimary,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
@@ -845,7 +1605,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                     DataCell(
                       user.isAdmin 
-                          ? const Icon(Icons.admin_panel_settings, color: Colors.amber, size: 20)
+                          ? Icon(Icons.admin_panel_settings, color: _secondaryColor, size: 20)
                           : const Text('-'),
                     ),
                     DataCell(
@@ -864,7 +1624,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             onPressed: () => _showEditUserDialog(user),
                             icon: const Icon(Icons.edit, size: 20),
                             tooltip: 'Edit User',
-                            color: Colors.blue,
+                            color: _secondaryColor,
                           ),
                           IconButton(
                             onPressed: user.id == widget.currentUser.id 
@@ -875,8 +1635,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 ? 'Cannot delete self' 
                                 : 'Delete User',
                             color: user.id == widget.currentUser.id 
-                                ? Colors.grey 
-                                : Colors.red,
+                                ? _onSurfaceVariantColor 
+                                : _errorColor,
                           ),
                         ],
                       ),
@@ -914,6 +1674,12 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
   final _homeScoreController = TextEditingController();
   final _awayScoreController = TextEditingController();
   bool _isLoading = false;
+
+  // Theme-based color scheme
+  ColorScheme get _colorScheme => Theme.of(context).colorScheme;
+  Color get _primaryColor => _colorScheme.primary;
+  Color get _errorColor => _colorScheme.error;
+  Color get _onSurfaceVariantColor => _colorScheme.onSurfaceVariant;
 
   @override
   void initState() {
@@ -963,7 +1729,7 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: _errorColor,
       ),
     );
   }
@@ -1036,9 +1802,9 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade50,
+                    color: _colorScheme.primaryContainer,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.shade200),
+                    border: Border.all(color: _colorScheme.outline),
                   ),
                   child: Column(
                     children: [
@@ -1058,16 +1824,16 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
                       const SizedBox(height: 8),
                       Text(
                         'Winning Square: $homeDigit-$awayDigit',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.green,
+                          color: _primaryColor,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Payouts: Winner \$2,400 | Adjacent \$150 | Diagonal \$100',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(fontSize: 12, color: _onSurfaceVariantColor),
                       ),
                     ],
                   ),
