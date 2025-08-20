@@ -1,4 +1,4 @@
-package com.example.sb_squares
+package com.llc.sb_squares
 
 import io.flutter.embedding.android.FlutterActivity
 

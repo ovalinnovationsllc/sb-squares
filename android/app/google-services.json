@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "741761946381",
+    "project_id": "sb-squares-100ee",
+    "storage_bucket": "sb-squares-100ee.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:741761946381:android:04dc5528d742e5ce15d644",
+        "android_client_info": {
+          "package_name": "com.llc.sb_squares"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0sF7fd8o79G68YwJbP7R_TMrJsfX7TLU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

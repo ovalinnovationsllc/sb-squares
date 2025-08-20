@@ -118,10 +118,14 @@ class _UserFormDialogState extends State<UserFormDialog> {
     return AlertDialog(
       title: Text(_isEditing ? 'Edit User' : 'Create New User'),
       content: SizedBox(
-        width: 400,
+        width: MediaQuery.of(context).size.width * 0.9,
+        height: MediaQuery.of(context).size.height * 0.7,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [

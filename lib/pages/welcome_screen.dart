@@ -1,4 +1,4 @@
-import 'dart:html' as html;
+import '../utils/platform_storage.dart';
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../services/user_service.dart';
@@ -10,12 +10,14 @@ class WelcomeScreen extends StatelessWidget {
 
   const WelcomeScreen({super.key, required this.user});
 
-  static void _logout() {
-    // Clear localStorage
-    html.window.localStorage.remove('sb_squares_user');
+  static void _logout(BuildContext context) async {
+    // Clear storage
+    await PlatformStorage.remove('sb_squares_user');
     
-    // Use a simple page refresh approach for web
-    html.window.location.reload();
+    // Navigate to login screen instead of trying to reload on mobile
+    if (context.mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    }
   }
 
   void _navigateToGame(BuildContext context) async {
@@ -43,49 +45,68 @@ class WelcomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('Super Bowl Squares 2026'),
         centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    user.displayName.isEmpty 
-                        ? 'Welcome!' 
-                        : user.displayName,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    'Entries: ${user.numEntries}/100',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: user.numEntries >= 100 
-                          ? Colors.red 
-                          : Colors.white70,
-                    ),
-                  ),
-                ],
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'logout') {
+                _logout(context);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout),
+                    SizedBox(width: 8),
+                    Text('Logout'),
+                  ],
+                ),
               ),
-            ),
-          ),
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
+            ],
           ),
         ],
       ),
       body: Column(
         children: [
+          // User info header - moved from AppBar to prevent overflow
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            color: Theme.of(context).colorScheme.inversePrimary.withOpacity(0.1),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    user.displayName.isEmpty 
+                        ? 'Welcome!' 
+                        : 'Welcome, ${user.displayName}!',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                Text(
+                  'Entries: ${user.numEntries}/100',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: user.numEntries >= 100 
+                        ? Colors.red 
+                        : Theme.of(context).colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
@@ -190,56 +211,68 @@ class WelcomeScreen extends StatelessWidget {
                             ),
                           ),
                           SizedBox(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          Wrap(
+                            alignment: WrapAlignment.spaceEvenly,
                             children: [
-                              Column(
-                                children: [
-                                  Text(
-                                    'Winning score - red:',
-                                    style: TextStyle(color: Colors.white, fontSize: 14),
-                                  ),
-                                  Text(
-                                    '\$2400',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      'Winning score - red:',
+                                      style: TextStyle(color: Colors.white, fontSize: 14),
+                                      textAlign: TextAlign.center,
                                     ),
-                                  ),
-                                ],
+                                    Text(
+                                      '\$2400',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              Column(
-                                children: [
-                                  Text(
-                                    'Adjacent box - black:',
-                                    style: TextStyle(color: Colors.white, fontSize: 14),
-                                  ),
-                                  Text(
-                                    '\$150',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      'Adjacent box - black:',
+                                      style: TextStyle(color: Colors.white, fontSize: 14),
+                                      textAlign: TextAlign.center,
                                     ),
-                                  ),
-                                ],
+                                    Text(
+                                      '\$150',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              Column(
-                                children: [
-                                  Text(
-                                    'Diagonal box - blue:',
-                                    style: TextStyle(color: Colors.white, fontSize: 14),
-                                  ),
-                                  Text(
-                                    '\$100',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      'Diagonal box - blue:',
+                                      style: TextStyle(color: Colors.white, fontSize: 14),
+                                      textAlign: TextAlign.center,
                                     ),
-                                  ),
-                                ],
+                                    Text(
+                                      '\$100',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -430,22 +463,29 @@ class WelcomeScreen extends StatelessWidget {
   }
 
   Widget _buildGridCell(String text, Color color, {bool isRed = false, bool isBlue = false}) {
-    return Container(
-      width: 80,
-      height: 60,
-      decoration: BoxDecoration(
-        color: color,
-        border: Border.all(color: Colors.black, width: 1),
-      ),
-      child: Center(
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            color: isRed ? Colors.red : (isBlue ? Colors.blue : Colors.black),
+    return Flexible(
+      child: Container(
+        constraints: const BoxConstraints(
+          minWidth: 60,
+          minHeight: 50,
+        ),
+        decoration: BoxDecoration(
+          color: color,
+          border: Border.all(color: Colors.black, width: 1),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(4.0),
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isRed ? Colors.red : (isBlue ? Colors.blue : Colors.black),
+              ),
+              textAlign: TextAlign.center,
+            ),
           ),
-          textAlign: TextAlign.center,
         ),
       ),
     );

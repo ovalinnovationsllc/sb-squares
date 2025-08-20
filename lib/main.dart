@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,6 +7,7 @@ import 'firebase_options.dart';
 import 'config/security_config.dart';
 import 'models/user_model.dart';
 import 'services/user_service.dart';
+import 'utils/platform_storage.dart';
 import 'services/game_config_service.dart';
 import 'pages/admin_dashboard.dart';
 import 'pages/welcome_screen.dart';
@@ -134,42 +134,42 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
     });
   }
 
-  // Save user authentication to localStorage
-  void _saveUserToLocalStorage(UserModel user) {
+  // Save user authentication to storage
+  void _saveUserToLocalStorage(UserModel user) async {
     try {
       final userJson = jsonEncode(user.toJson());
-      html.window.localStorage['sb_squares_user'] = userJson;
-      print('User saved to localStorage');
+      await PlatformStorage.setString('sb_squares_user', userJson);
+      print('User saved to storage');
     } catch (e) {
-      print('Error saving user to localStorage: $e');
+      print('Error saving user to storage: $e');
     }
   }
 
-  // Load user authentication from localStorage
-  UserModel? _loadUserFromLocalStorage() {
+  // Load user authentication from storage
+  Future<UserModel?> _loadUserFromLocalStorage() async {
     try {
-      final userJson = html.window.localStorage['sb_squares_user'];
+      final userJson = await PlatformStorage.getString('sb_squares_user');
       if (userJson != null) {
         final userData = jsonDecode(userJson) as Map<String, dynamic>;
         return UserModel.fromJson(userData);
       }
     } catch (e) {
-      print('Error loading user from localStorage: $e');
+      print('Error loading user from storage: $e');
       // Clear corrupted data
-      html.window.localStorage.remove('sb_squares_user');
+      await PlatformStorage.remove('sb_squares_user');
     }
     return null;
   }
 
-  // Clear user authentication from localStorage
-  void _clearUserFromLocalStorage() {
-    html.window.localStorage.remove('sb_squares_user');
-    print('User cleared from localStorage');
+  // Clear user authentication from storage
+  void _clearUserFromLocalStorage() async {
+    await PlatformStorage.remove('sb_squares_user');
+    print('User cleared from storage');
   }
 
   // Check for saved authentication on app startup
-  void _checkSavedAuthentication() {
-    final savedUser = _loadUserFromLocalStorage();
+  void _checkSavedAuthentication() async {
+    final savedUser = await _loadUserFromLocalStorage();
     if (savedUser != null) {
       setState(() {
         _currentUser = savedUser;
@@ -288,6 +288,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -300,27 +301,40 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
             ],
           ),
         ),
-        child: Column(
-          children: [
-            Expanded(
-              child: SafeArea(
-                child: Center(
-                  child: AnimatedBuilder(
-                    animation: _controller,
-                    builder: (context, child) {
-                      return FadeTransition(
-                        opacity: _fadeAnimation,
-                        child: ScaleTransition(
-                          scale: _scaleAnimation,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height - 
+                    MediaQuery.of(context).padding.top - 
+                    MediaQuery.of(context).padding.bottom,
+              ),
+              child: IntrinsicHeight(
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: AnimatedBuilder(
+                          animation: _controller,
+                          builder: (context, child) {
+                            return FadeTransition(
+                              opacity: _fadeAnimation,
+                              child: ScaleTransition(
+                                scale: _scaleAnimation,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
                               const SuperBowlBanner(),
                               const SizedBox(height: 20),
                               const FootballFieldLogo(),
                               const SizedBox(height: 40),
                               Container(
-                                width: 400,
+                                width: MediaQuery.of(context).size.width * 0.9,
+                                constraints: const BoxConstraints(maxWidth: 400),
                                 padding: const EdgeInsets.symmetric(horizontal: 20),
                                 child: Column(
                                   children: [
@@ -453,17 +467,20 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                   ],
                                 ),
                               ),
-                            ],
-                          ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    ),
+                    const FooterWidget(),
+                  ],
                 ),
               ),
             ),
-            const FooterWidget(),
-          ],
+          ),
         ),
       ),
     );

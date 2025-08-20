@@ -46,6 +46,9 @@ dependencies:
   
   # Google Fonts for Orbitron
   google_fonts: ^6.1.0
+  
+  # Cross-platform storage
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:

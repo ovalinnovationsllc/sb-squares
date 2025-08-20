@@ -1,4 +1,4 @@
-import 'dart:html' as html;
+import '../utils/platform_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
@@ -294,7 +294,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: _errorColor),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _errorColor,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Clear All'),
           ),
         ],
@@ -322,9 +325,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  void _logout() {
-    // Clear localStorage
-    html.window.localStorage.remove('sb_squares_user');
+  void _logout() async {
+    // Clear storage
+    await PlatformStorage.remove('sb_squares_user');
     
     // Show confirmation and navigate back to login screen
     ScaffoldMessenger.of(context).showSnackBar(
@@ -334,13 +337,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
       ),
     );
     
-    // Use a simple page refresh approach for web
-    html.window.location.reload();
+    // Navigate to login screen instead of trying to reload on mobile
+    if (mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('Admin Dashboard'),
@@ -375,44 +381,35 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
             ],
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    widget.currentUser.displayName.isEmpty 
-                        ? 'Admin' 
-                        : widget.currentUser.displayName,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'logout') {
+                _logout();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                enabled: false,
+                child: ListTile(
+                  leading: Icon(Icons.admin_panel_settings, color: _secondaryColor),
+                  title: Text(
+                    widget.currentUser.displayName.isEmpty ? 'Admin' : widget.currentUser.displayName,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  Text(
-                    'Administrator',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: _colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+                  subtitle: const Text('Administrator'),
+                  contentPadding: EdgeInsets.zero,
+                ),
               ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0),
-            child: Icon(
-              Icons.admin_panel_settings,
-              color: _secondaryColor,
-            ),
-          ),
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
+              const PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                  leading: Icon(Icons.logout),
+                  title: Text('Logout'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -441,7 +438,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         onRefresh: _loadUsers,
                         child: SingleChildScrollView(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          padding: const EdgeInsets.all(16.0),
+                          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -480,29 +477,63 @@ class _AdminDashboardState extends State<AdminDashboard> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
               children: [
-                Expanded(
-                  child: Text('Total Users: $_totalUsers', style: const TextStyle(fontSize: 16)),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: _primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Total Users: $_totalUsers', 
+                    style: TextStyle(fontSize: 16, color: _primaryColor, fontWeight: FontWeight.w600),
+                  ),
                 ),
-                Expanded(
-                  child: Text('Total Entries: $_totalEntries', style: const TextStyle(fontSize: 16)),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Total Entries: $_totalEntries', 
+                    style: TextStyle(fontSize: 16, color: Colors.blue, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
               children: [
-                Expanded(
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   child: Text(
                     'Paid: $_paidUsers',
-                    style: TextStyle(fontSize: 16, color: _primaryColor),
+                    style: TextStyle(fontSize: 16, color: Colors.green, fontWeight: FontWeight.w600),
                   ),
                 ),
-                Expanded(
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: _errorColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   child: Text(
                     'Unpaid: $_unpaidUsers',
-                    style: TextStyle(fontSize: 16, color: _errorColor),
+                    style: TextStyle(fontSize: 16, color: _errorColor, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -521,20 +552,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Board Numbers',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                Row(
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
                   children: [
                     if (_currentBoardNumbers == null) ...[
                       ElevatedButton.icon(
                         onPressed: _randomizeBoardNumbers,
                         icon: const Icon(Icons.shuffle, size: 16),
-                        label: const Text('Randomize Numbers'),
+                        label: Text(MediaQuery.of(context).size.width > 600 ? 'Randomize Numbers' : 'Randomize'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _primaryColor,
                           foregroundColor: _colorScheme.onSecondary,
@@ -544,17 +578,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       ElevatedButton.icon(
                         onPressed: _randomizeBoardNumbers,
                         icon: const Icon(Icons.shuffle, size: 16),
-                        label: const Text('Re-randomize'),
+                        label: Text(MediaQuery.of(context).size.width > 600 ? 'Re-randomize' : 'Shuffle'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _primaryColor,
                           foregroundColor: _colorScheme.onPrimary,
                         ),
                       ),
-                      const SizedBox(width: 12),
                       ElevatedButton.icon(
                         onPressed: _clearBoardNumbers,
                         icon: const Icon(Icons.clear, size: 16),
-                        label: const Text('Clear Numbers'),
+                        label: Text(MediaQuery.of(context).size.width > 600 ? 'Clear Numbers' : 'Clear'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _errorColor,
                           foregroundColor: _colorScheme.onError,
@@ -591,7 +624,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       style: TextStyle(fontSize: 14, color: _onSurfaceVariantColor),
                     ),
                     Text(
-                      'Date: ${_currentBoardNumbers!.randomizedAt?.toLocal().toString().split(' ')[0] ?? 'Unknown'}',
+                      'Date: ${_currentBoardNumbers!.randomizedAt != null ? DateFormatter.formatDate(_currentBoardNumbers!.randomizedAt!) : 'Unknown'}',
                       style: TextStyle(fontSize: 14, color: _onSurfaceVariantColor),
                     ),
                     const SizedBox(height: 12),
@@ -697,29 +730,31 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Board Management',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                Row(
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     ElevatedButton.icon(
                       onPressed: _clearAllBoardSelections,
                       icon: const Icon(Icons.clear_all, size: 16),
-                      label: const Text('Clear All Squares'),
+                      label: Text(MediaQuery.of(context).size.width > 600 ? 'Clear All Squares' : 'Clear Squares'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _errorColor,
                         foregroundColor: _colorScheme.onError,
                       ),
                     ),
-                    const SizedBox(width: 12),
                     ElevatedButton.icon(
                       onPressed: _clearAllUsers,
                       icon: const Icon(Icons.delete_forever, size: 16),
-                      label: const Text('Clear All Users'),
+                      label: Text(MediaQuery.of(context).size.width > 600 ? 'Clear All Users' : 'Clear Users'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _errorColor,
                         foregroundColor: _colorScheme.onError,
@@ -757,7 +792,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: _errorColor),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _errorColor,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Clear All'),
           ),
         ],
@@ -792,7 +830,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: _errorColor),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _errorColor,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('DELETE ALL USERS'),
           ),
         ],
@@ -927,14 +968,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Team Names',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                Row(
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     ElevatedButton.icon(
                       onPressed: _showEditTeamNamesDialog,
@@ -946,11 +990,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       ),
                     ),
                     if (_currentConfig == null) ...[
-                      const SizedBox(width: 8),
                       ElevatedButton.icon(
                         onPressed: _forceCreateConfig,
                         icon: const Icon(Icons.add, size: 16),
-                        label: const Text('Create Config'),
+                        label: Text(MediaQuery.of(context).size.width > 600 ? 'Create Config' : 'Create'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _primaryColor,
                           foregroundColor: _colorScheme.onPrimary,
@@ -1185,6 +1228,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
             
             const SizedBox(height: 4),
             
+            // Reverse score winner for Q2 and Q4
+            if (winners['reverse'] != null && winners['reverse']!.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                margin: const EdgeInsets.only(bottom: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.orange.shade300),
+                ),
+                child: Text(
+                  '🔄 ${winners['reverse']!.first}',
+                  style: GoogleFonts.rubik(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade800,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            
             // Adjacent and Diagonal winners side by side
             if ((winners['adjacent'] != null && winners['adjacent']!.isNotEmpty) ||
                 (winners['diagonal'] != null && winners['diagonal']!.isNotEmpty))
@@ -1302,6 +1367,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       'winner': <String>[],
       'adjacent': <String>[],
       'diagonal': <String>[],
+      'reverse': <String>[], // For $200 reverse score prizes
     };
 
     if (score.id.isEmpty || _currentBoardNumbers == null) return winners;
@@ -1405,6 +1471,42 @@ class _AdminDashboardState extends State<AdminDashboard> {
       }
     }).toList();
 
+    // Calculate reverse score prizes for Q2 (halftime) and Q4 (final)
+    if (quarter == 2 || quarter == 4) {
+      // Reverse the digits: last digit becomes first, first becomes last, then add 5
+      final reversedHomeDigit = (awayScoreDigit + 5) % 10;
+      final reversedAwayDigit = (homeScoreDigit + 5) % 10;
+      
+      // Find grid positions for reversed + 5 digits
+      int? reverseHomeRow, reverseAwayCol;
+      
+      for (int i = 0; i < homeNumbers.length; i++) {
+        if (homeNumbers[i] == reversedHomeDigit) {
+          reverseHomeRow = i;
+          break;
+        }
+      }
+      
+      for (int i = 0; i < awayNumbers.length; i++) {
+        if (awayNumbers[i] == reversedAwayDigit) {
+          reverseAwayCol = i;
+          break;
+        }
+      }
+      
+      if (reverseHomeRow != null && reverseAwayCol != null) {
+        final reverseSquare = '$reverseHomeRow-$reverseAwayCol';
+        final reverseOwner = squareOwners[reverseSquare];
+        final quarterName = quarter == 2 ? 'Halftime' : 'Final';
+        
+        if (reverseOwner != null) {
+          winners['reverse']!.add('$reverseOwner ($reversedHomeDigit-$reversedAwayDigit) - $quarterName \$200');
+        } else {
+          winners['reverse']!.add('No owner ($reversedHomeDigit-$reversedAwayDigit) - $quarterName \$200');
+        }
+      }
+    }
+
     return winners;
   }
 
@@ -1413,6 +1515,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     total += (winners['winner']?.length ?? 0) * 2400; // Winner: $2400 each
     total += (winners['adjacent']?.length ?? 0) * 150; // Adjacent: $150 each
     total += (winners['diagonal']?.length ?? 0) * 100; // Diagonal: $100 each
+    total += (winners['reverse']?.length ?? 0) * 200; // Reverse: $200 each
     return total;
   }
 
@@ -1424,20 +1527,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Quarter Scores & Winners',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                ElevatedButton.icon(
-                  onPressed: _clearAllQuarterScores,
-                  icon: const Icon(Icons.clear_all, size: 16),
-                  label: const Text('Clear All Scores'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _errorColor,
-                    foregroundColor: _colorScheme.onError,
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ElevatedButton.icon(
+                    onPressed: _clearAllQuarterScores,
+                    icon: const Icon(Icons.clear_all, size: 16),
+                    label: Text(MediaQuery.of(context).size.width > 600 ? 'Clear All Scores' : 'Clear Scores'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _errorColor,
+                      foregroundColor: _colorScheme.onError,
+                    ),
                   ),
                 ),
               ],
@@ -1578,43 +1685,47 @@ class _AdminDashboardState extends State<AdminDashboard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'User Details',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 200,
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: const InputDecoration(
-                          hintText: 'Search users...',
-                          prefixIcon: Icon(Icons.search),
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                const SizedBox(height: 12),
+                // Mobile-responsive controls
+                if (MediaQuery.of(context).size.width > 600) ...[
+                  // Desktop layout - single row
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: const InputDecoration(
+                            hintText: 'Search users...',
+                            prefixIcon: Icon(Icons.search),
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Text('Filter: ', style: TextStyle(fontSize: 16, color: _onSurfaceVariantColor)),
-                    DropdownButton<String>(
-                      value: _sortFilter,
-                      onChanged: (value) => _updateFilter(value!),
-                      items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All Users')),
-                        DropdownMenuItem(value: 'paid', child: Text('Paid Only')),
-                        DropdownMenuItem(value: 'unpaid', child: Text('Unpaid Only')),
-                      ],
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      onPressed: _showCreateUserDialog,
-                      icon: const Icon(Icons.person_add),
+                      const SizedBox(width: 16),
+                      Text('Filter: ', style: TextStyle(fontSize: 16, color: _onSurfaceVariantColor)),
+                      DropdownButton<String>(
+                        value: _sortFilter,
+                        onChanged: (value) => _updateFilter(value!),
+                        items: const [
+                          DropdownMenuItem(value: 'all', child: Text('All Users')),
+                          DropdownMenuItem(value: 'paid', child: Text('Paid Only')),
+                          DropdownMenuItem(value: 'unpaid', child: Text('Unpaid Only')),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      ElevatedButton.icon(
+                        onPressed: _showCreateUserDialog,
+                        icon: const Icon(Icons.person_add),
                       label: const Text('Create User'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _primaryColor,
@@ -1629,17 +1740,72 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                   ],
                 ),
+                ] else ...[
+                  // Mobile layout - stacked
+                  TextField(
+                    controller: _searchController,
+                    decoration: const InputDecoration(
+                      hintText: 'Search users...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Text('Filter: ', style: TextStyle(fontSize: 16, color: _onSurfaceVariantColor)),
+                            Expanded(
+                              child: DropdownButton<String>(
+                                value: _sortFilter,
+                                onChanged: (value) => _updateFilter(value!),
+                                isExpanded: true,
+                                items: const [
+                                  DropdownMenuItem(value: 'all', child: Text('All Users')),
+                                  DropdownMenuItem(value: 'paid', child: Text('Paid Only')),
+                                  DropdownMenuItem(value: 'unpaid', child: Text('Unpaid Only')),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: _showCreateUserDialog,
+                        icon: const Icon(Icons.person_add),
+                        label: const Text('Create'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _primaryColor,
+                          foregroundColor: _colorScheme.onPrimary,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _loadUsers,
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Refresh',
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 16),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: MediaQuery.of(context).size.width - 64, // Account for padding
-                ),
-                child: DataTable(
-                  columnSpacing: 24,
+            // Mobile-responsive user list
+            if (MediaQuery.of(context).size.width > 600) ...[
+              // Desktop: DataTable
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: MediaQuery.of(context).size.width - 64,
+                  ),
+                  child: DataTable(
+                    columnSpacing: 24,
                 columns: const [
                 DataColumn(label: Text('Display Name')),
                 DataColumn(label: Text('Email')),
@@ -1711,12 +1877,129 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ],
                 );
               }).toList(),
+                  ),
                 ),
               ),
-            ),
+            ] else ...[
+              // Mobile: Card list
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _filteredUsers.length,
+                separatorBuilder: (context, index) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final user = _filteredUsers[index];
+                  return Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      user.displayName.isEmpty ? 'No Name' : user.displayName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      user.email,
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 14,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    onPressed: () => _showEditUserDialog(user),
+                                    icon: const Icon(Icons.edit, size: 20),
+                                    tooltip: 'Edit User',
+                                  ),
+                                  IconButton(
+                                    onPressed: () => _deleteUser(user),
+                                    icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                                    tooltip: 'Delete User',
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: [
+                              _buildMobileTag('Entries', user.numEntries.toString(), Colors.blue),
+                              _buildMobileTag(
+                                'Status', 
+                                user.hasPaid ? 'Paid' : 'Unpaid', 
+                                user.hasPaid ? Colors.green : Colors.red,
+                              ),
+                              if (user.isAdmin)
+                                _buildMobileTag('Admin', 'Yes', Colors.orange),
+                              _buildMobileTag(
+                                'Created', 
+                                DateFormatter.formatDate(user.createdAt),
+                                Colors.grey,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
           ],
         ),
       ),
+      ),
+    );
+  }
+
+  Widget _buildMobileTag(String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 12,
+              color: color.withOpacity(0.8),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1902,7 +2185,7 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Payouts: Winner \$2,400 | Adjacent \$150 | Diagonal \$100',
+                        'Payouts: Winner \$2,400 | Adjacent \$150 | Diagonal \$100 | Reverse \$200 (Q2/Q4)',
                         style: TextStyle(fontSize: 12, color: _onSurfaceVariantColor),
                       ),
                     ],

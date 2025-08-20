@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
@@ -13,6 +12,7 @@ import '../services/board_numbers_service.dart';
 import '../services/game_config_service.dart';
 import '../widgets/footer_widget.dart';
 import '../utils/user_color_generator.dart';
+import '../utils/platform_storage.dart';
 import 'admin_dashboard.dart';
 
 class SquaresGamePage extends StatefulWidget {
@@ -165,7 +165,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     if (!widget.user.hasPaid) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Payment required to select squares. Please contact admin to activate your account.'),
+          content: Text('Payment required. Contact admin to activate account.'),
           backgroundColor: Colors.orange,
           duration: Duration(seconds: 3),
         ),
@@ -355,8 +355,12 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
       barrierDismissible: true,
       builder: (context) => Dialog(
         child: Container(
-          width: MediaQuery.of(context).size.width * 0.8,
-          height: MediaQuery.of(context).size.height * 0.8,
+          width: MediaQuery.of(context).size.width * 0.9,
+          height: MediaQuery.of(context).size.height * 0.85,
+          constraints: const BoxConstraints(
+            maxWidth: 600,
+            maxHeight: 700,
+          ),
           padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
@@ -435,56 +439,68 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                               ),
                             ),
                             SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            Wrap(
+                              alignment: WrapAlignment.spaceEvenly,
                               children: [
-                                Column(
-                                  children: [
-                                    Text(
-                                      'Winning score:',
-                                      style: TextStyle(color: Colors.white, fontSize: 12),
-                                    ),
-                                    Text(
-                                      '\$2400',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
+                                Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 4.0),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        'Winning score:',
+                                        style: TextStyle(color: Colors.white, fontSize: 12),
+                                        textAlign: TextAlign.center,
                                       ),
-                                    ),
-                                  ],
+                                      Text(
+                                        '\$2400',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                Column(
-                                  children: [
-                                    Text(
-                                      'Adjacent box:',
-                                      style: TextStyle(color: Colors.white, fontSize: 12),
-                                    ),
-                                    Text(
-                                      '\$150',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
+                                Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 4.0),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        'Adjacent box:',
+                                        style: TextStyle(color: Colors.white, fontSize: 12),
+                                        textAlign: TextAlign.center,
                                       ),
-                                    ),
-                                  ],
+                                      Text(
+                                        '\$150',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                Column(
-                                  children: [
-                                    Text(
-                                      'Diagonal box:',
-                                      style: TextStyle(color: Colors.white, fontSize: 12),
-                                    ),
-                                    Text(
-                                      '\$100',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
+                                Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 4.0),
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        'Diagonal box:',
+                                        style: TextStyle(color: Colors.white, fontSize: 12),
+                                        textAlign: TextAlign.center,
                                       ),
-                                    ),
-                                  ],
+                                      Text(
+                                        '\$100',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
@@ -557,37 +573,47 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   }
   
   Widget _buildInstructionCell(String text, Color color) {
-    return Container(
-      width: 70,
-      height: 50,
-      decoration: BoxDecoration(
-        color: color,
-        border: Border.all(color: Colors.black, width: 1),
-      ),
-      child: Center(
-        child: Text(
-          text,
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
+    return Flexible(
+      child: Container(
+        constraints: const BoxConstraints(
+          minWidth: 60,
+          minHeight: 45,
+        ),
+        decoration: BoxDecoration(
+          color: color,
+          border: Border.all(color: Colors.black, width: 1),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(2.0),
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ),
-          textAlign: TextAlign.center,
         ),
       ),
     );
   }
 
-  void _logout() {
-    // Clear localStorage
-    html.window.localStorage.remove('sb_squares_user');
+  void _logout() async {
+    // Clear storage
+    await PlatformStorage.remove('sb_squares_user');
     
-    // Use a simple page refresh approach for web
-    html.window.location.reload();
+    // Navigate to login screen instead of trying to reload on mobile
+    if (mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('Super Bowl Squares'),
@@ -595,82 +621,106 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: '1st Quarter'),
-            Tab(text: '2nd Quarter'),
-            Tab(text: '3rd Quarter'),
-            Tab(text: '4th Quarter'),
+            Tab(text: 'Q1'),
+            Tab(text: 'Q2'),
+            Tab(text: 'Q3'),
+            Tab(text: 'Q4'),
           ],
         ),
         actions: [
-          IconButton(
-            onPressed: () async {
-              // Real-time streams handle updates automatically
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Board updates automatically in real-time'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              switch (value) {
+                case 'instructions':
+                  _showInstructions();
+                  break;
+                case 'logout':
+                  _logout();
+                  break;
+              }
             },
-            icon: const Icon(Icons.sync),
-            tooltip: 'Real-time Sync',
-          ),
-          IconButton(
-            onPressed: _showInstructions,
-            icon: const Icon(Icons.help_outline),
-            tooltip: 'Game Instructions',
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    widget.user.displayName.isEmpty 
-                        ? 'Welcome!' 
-                        : widget.user.displayName,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    widget.user.hasPaid 
-                        ? 'Selections: ${_getUserSelectionsCount()}/${widget.user.numEntries * 4}'
-                        : 'Payment Required',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: !widget.user.hasPaid
-                          ? Colors.orange.shade300
-                          : _getUserSelectionsCount() >= widget.user.numEntries * 4
-                              ? Colors.red 
-                              : Colors.white70,
-                      fontWeight: !widget.user.hasPaid ? FontWeight.bold : null,
-                    ),
-                  ),
-                ],
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'instructions',
+                child: Row(
+                  children: [
+                    Icon(Icons.help_outline),
+                    SizedBox(width: 8),
+                    Text('Game Instructions'),
+                  ],
+                ),
               ),
-            ),
-          ),
-          IconButton(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout),
+                    SizedBox(width: 8),
+                    Text('Logout'),
+                  ],
+                ),
+              ),
+            ],
           ),
           if (widget.user.isAdmin)
-            const Padding(
-              padding: EdgeInsets.only(right: 8.0),
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
               child: Icon(
                 Icons.admin_panel_settings,
                 color: Colors.amber,
+                size: 20,
               ),
             ),
         ],
       ),
       body: Column(
         children: [
+          // User info header - moved from AppBar to prevent overflow
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            color: Theme.of(context).colorScheme.inversePrimary.withOpacity(0.1),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.user.displayName.isEmpty 
+                        ? 'Welcome!' 
+                        : 'Welcome, ${widget.user.displayName}!',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                Text(
+                  widget.user.hasPaid 
+                      ? '${_getUserSelectionsCount()}/${widget.user.numEntries * 4} squares'
+                      : 'Payment Required',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: !widget.user.hasPaid
+                        ? Colors.orange.shade700
+                        : _getUserSelectionsCount() >= widget.user.numEntries * 4
+                            ? Colors.red 
+                            : Theme.of(context).colorScheme.onSurface,
+                    fontWeight: !widget.user.hasPaid ? FontWeight.bold : FontWeight.w500,
+                  ),
+                ),
+                if (widget.user.isAdmin)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: Icon(
+                      Icons.admin_panel_settings,
+                      color: Colors.amber.shade700,
+                      size: 20,
+                    ),
+                  ),
+              ],
+            ),
+          ),
           Expanded(
             child: TabBarView(
               controller: _tabController,
@@ -750,16 +800,19 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                           child: SizedBox(
                             width: cellSize * 10,
                             height: cellSize * 0.4,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            child: Wrap(
+                              alignment: WrapAlignment.spaceEvenly,
                               children: _awayTeamName.toUpperCase().split('').map((letter) => 
-                                Text(
-                                  letter,
-                                  style: GoogleFonts.rubik(
-                                    fontSize: cellSize * 0.25,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue.shade700,
-                                    height: 1.0,
+                                Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: cellSize * 0.02),
+                                  child: Text(
+                                    letter,
+                                    style: GoogleFonts.rubik(
+                                      fontSize: cellSize * 0.25,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.blue.shade700,
+                                      height: 1.0,
+                                    ),
                                   ),
                                 ),
                               ).toList(),
@@ -805,16 +858,20 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                           child: SizedBox(
                             width: cellSize * 0.4,
                             height: cellSize * 9.6,
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            child: Wrap(
+                              direction: Axis.vertical,
+                              alignment: WrapAlignment.spaceEvenly,
                               children: _homeTeamName.toUpperCase().split('').map((letter) => 
-                                Text(
-                                  letter,
-                                  style: GoogleFonts.rubik(
-                                    fontSize: cellSize * 0.25,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.red.shade700,
-                                    height: 1.0,
+                                Padding(
+                                  padding: EdgeInsets.symmetric(vertical: cellSize * 0.02),
+                                  child: Text(
+                                    letter,
+                                    style: GoogleFonts.rubik(
+                                      fontSize: cellSize * 0.25,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.red.shade700,
+                                      height: 1.0,
+                                    ),
                                   ),
                                 ),
                               ).toList(),
@@ -985,6 +1042,8 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                                   ],
                                                 ),
                                                 textAlign: TextAlign.center,
+                                                overflow: TextOverflow.ellipsis,
+                                                maxLines: 1,
                                               )
                                             : null,
                                         ),
