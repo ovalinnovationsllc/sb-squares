@@ -48,3 +48,11 @@ app.*.map.json
 lib/firebase_options.dart
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
+
+# Firebase cache
+.firebase/
+
+# Cloud Functions
+functions/node_modules/
+functions/.env
+functions/build/

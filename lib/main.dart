@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'config/security_config.dart';
 import 'models/user_model.dart';
 import 'services/user_service.dart';
+import 'services/verification_service.dart';
 import 'utils/platform_storage.dart';
 import 'services/game_config_service.dart';
 import 'pages/admin_dashboard.dart';
@@ -68,6 +70,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   late Animation<double> _scaleAnimation;
   final TextEditingController _emailController = TextEditingController();
   final UserService _userService = UserService();
+  final VerificationService _verificationService = VerificationService();
   bool _isEmailValid = false;
   String? _emailError;
   bool _isCheckingDatabase = false;
@@ -170,6 +173,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   // Check for saved authentication on app startup
   void _checkSavedAuthentication() async {
     final savedUser = await _loadUserFromLocalStorage();
+    print('_checkSavedAuthentication: savedUser = ${savedUser?.email}');
     if (savedUser != null) {
       setState(() {
         _currentUser = savedUser;
@@ -177,10 +181,13 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
         _isEmailValid = true;
         _userExists = true;
       });
-      
-      // Auto-navigate to the appropriate page
+
+      // Auto-navigate only for admins, others need to verify every time
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _navigateToGame();
+        if (savedUser.isAdmin) {
+          _navigateToGame();
+        }
+        // Non-admins stay on login page - they need to verify every time
       });
     }
   }
@@ -257,7 +264,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
 
   void _navigateToGame() {
     if (!_isEmailValid || _currentUser == null) return;
-    
+
     // Determine destination based on user type and whether they've seen instructions
     Widget destination;
     if (_currentUser!.isAdmin) {
@@ -270,7 +277,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
       // First-time users see the welcome screen with instructions
       destination = WelcomeScreen(user: _currentUser!);
     }
-    
+
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => destination,
@@ -282,6 +289,530 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
         },
         transitionDuration: const Duration(milliseconds: 800),
       ),
+    );
+  }
+
+  void _showSignUpDialog() {
+    final formKey = GlobalKey<FormState>();
+    final emailController = TextEditingController();
+    final displayNameController = TextEditingController();
+    final entriesController = TextEditingController(text: '1');
+    bool isSubmitting = false;
+    String? errorMessage;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1a472a),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Colors.amber, width: 2),
+              ),
+              title: Row(
+                children: [
+                  const Icon(Icons.person_add, color: Colors.amber, size: 28),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Sign Up',
+                    style: GoogleFonts.rubik(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (errorMessage != null)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.redAccent),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  errorMessage!,
+                                  style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      TextFormField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: _signUpInputDecoration('Email', Icons.email),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Email is required';
+                          }
+                          final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
+                          if (!emailRegex.hasMatch(value.trim())) {
+                            return 'Please enter a valid email';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: displayNameController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: _signUpInputDecoration('Display Name', Icons.person),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Display name is required';
+                          }
+                          if (value.trim().length < 2) {
+                            return 'Name must be at least 2 characters';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: entriesController,
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: _signUpInputDecoration('Number of Entries', Icons.grid_view),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Number of entries is required';
+                          }
+                          final entries = int.tryParse(value.trim());
+                          if (entries == null) {
+                            return 'Please enter a valid number';
+                          }
+                          if (entries < 1 || entries > 100) {
+                            return 'Entries must be between 1 and 100';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Each entry costs \$150',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          if (!formKey.currentState!.validate()) return;
+
+                          setDialogState(() {
+                            isSubmitting = true;
+                            errorMessage = null;
+                          });
+
+                          final email = emailController.text.trim().toLowerCase();
+
+                          // Check if email already exists
+                          final existingUser = await _userService.getUserByEmail(email);
+                          if (existingUser != null) {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              errorMessage = 'An account with this email already exists. Please log in instead.';
+                            });
+                            return;
+                          }
+
+                          // Create the new user
+                          final newUser = await _userService.createUserWithEmail(
+                            email: email,
+                            displayName: displayNameController.text.trim(),
+                            numEntries: int.parse(entriesController.text.trim()),
+                            isAdmin: false,
+                            hasPaid: false,
+                          );
+
+                          if (newUser != null) {
+                            // Save to local storage and set state
+                            _saveUserToLocalStorage(newUser);
+                            setState(() {
+                              _currentUser = newUser;
+                              _emailController.text = newUser.email;
+                              _isEmailValid = true;
+                              _userExists = true;
+                            });
+
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+
+                            // Show verification dialog for new users
+                            _showVerificationDialog(newUser);
+                          } else {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              errorMessage = 'Failed to create account. Please try again.';
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Sign Up'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  InputDecoration _signUpInputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white70),
+      prefixIcon: Icon(icon, color: Colors.white70),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.amber, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.redAccent),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+      ),
+      filled: true,
+      fillColor: Colors.black.withOpacity(0.3),
+    );
+  }
+
+  Future<void> _showVerificationDialog(UserModel user) async {
+    final codeController = TextEditingController();
+    bool isSendingCode = true;
+    bool isVerifying = false;
+    String? errorMessage;
+    String? successMessage;
+    bool canResend = false;
+    int resendCountdown = 60;
+    Timer? countdownTimer;
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Start countdown timer for resend
+            void startCountdown() {
+              resendCountdown = 60;
+              canResend = false;
+              countdownTimer?.cancel();
+              countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+                if (resendCountdown > 0) {
+                  setDialogState(() {
+                    resendCountdown--;
+                  });
+                } else {
+                  timer.cancel();
+                  setDialogState(() {
+                    canResend = true;
+                  });
+                }
+              });
+            }
+
+            // Send code on first build
+            if (isSendingCode) {
+              isSendingCode = false;
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                final sendResult = await _verificationService.sendVerificationCode(
+                  email: user.email,
+                  userId: user.id,
+                );
+                if (sendResult.success) {
+                  setDialogState(() {
+                    successMessage = 'Code sent!';
+                  });
+                  startCountdown();
+                } else {
+                  setDialogState(() {
+                    errorMessage = sendResult.message;
+                    canResend = true;
+                  });
+                }
+              });
+            }
+
+            return AlertDialog(
+              backgroundColor: const Color(0xFF1a472a),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: const BorderSide(color: Colors.amber, width: 2),
+              ),
+              title: Row(
+                children: [
+                  const Icon(Icons.verified_user, color: Colors.amber, size: 28),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Verify Email',
+                    style: GoogleFonts.rubik(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      successMessage != null ? 'We sent a 6-digit code to:' : 'Sending code to:',
+                      style: TextStyle(color: Colors.white.withOpacity(0.8)),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      user.email,
+                      style: const TextStyle(
+                        color: Colors.amber,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (successMessage == null && errorMessage == null)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    if (errorMessage != null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.redAccent),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                errorMessage!,
+                                style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (successMessage != null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                successMessage!,
+                                style: const TextStyle(color: Colors.green, fontSize: 14),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    TextField(
+                      controller: codeController,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      maxLength: 6,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 12,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                      ],
+                      decoration: InputDecoration(
+                        counterText: '',
+                        hintText: '------',
+                        hintStyle: TextStyle(
+                          color: Colors.white.withOpacity(0.3),
+                          fontSize: 32,
+                          letterSpacing: 12,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Colors.amber, width: 2),
+                        ),
+                        filled: true,
+                        fillColor: Colors.black.withOpacity(0.3),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: canResend
+                          ? () async {
+                              setDialogState(() {
+                                successMessage = null;
+                                errorMessage = null;
+                              });
+                              final result = await _verificationService.sendVerificationCode(
+                                email: user.email,
+                                userId: user.id,
+                              );
+                              if (result.success) {
+                                setDialogState(() {
+                                  successMessage = 'New code sent!';
+                                });
+                                startCountdown();
+                              } else {
+                                setDialogState(() {
+                                  errorMessage = result.message;
+                                });
+                              }
+                            }
+                          : null,
+                      child: Text(
+                        canResend ? 'Resend Code' : 'Resend in ${resendCountdown}s',
+                        style: TextStyle(
+                          color: canResend ? Colors.amber : Colors.white.withOpacity(0.5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isVerifying
+                      ? null
+                      : () {
+                          countdownTimer?.cancel();
+                          Navigator.of(dialogContext).pop();
+                        },
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: isVerifying || codeController.text.length != 6
+                      ? null
+                      : () async {
+                          setDialogState(() {
+                            isVerifying = true;
+                            errorMessage = null;
+                          });
+
+                          final result = await _verificationService.verifyCode(
+                            userId: user.id,
+                            code: codeController.text,
+                          );
+
+                          if (result.success) {
+                            countdownTimer?.cancel();
+
+                            // Update local user state with verified status
+                            final verifiedUser = user.copyWith(emailVerified: true);
+                            _saveUserToLocalStorage(verifiedUser);
+                            setState(() {
+                              _currentUser = verifiedUser;
+                            });
+
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+
+                            // Navigate to the game
+                            _navigateToGame();
+                          } else {
+                            setDialogState(() {
+                              isVerifying = false;
+                              errorMessage = result.message;
+                            });
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.amber,
+                    foregroundColor: Colors.black,
+                  ),
+                  child: isVerifying
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Verify'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -349,12 +880,17 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                         await _validateEmail();
                                         // Navigate if validation passed
                                         if (_isEmailValid && _currentUser != null) {
-                                          _navigateToGame();
+                                          // Admins skip verification, others always need to verify
+                                          if (_currentUser!.isAdmin) {
+                                            _navigateToGame();
+                                          } else {
+                                            _showVerificationDialog(_currentUser!);
+                                          }
                                         }
                                       },
                                       decoration: InputDecoration(
                                         counterText: '',
-                                        hintText: 'Use your invite email',
+                                        hintText: 'Enter account email',
                                         hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
                                         labelText: 'Email',
                                         labelStyle: const TextStyle(color: Colors.white),
@@ -426,13 +962,18 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                               ),
                               const SizedBox(height: 30),
                               ElevatedButton(
-                                onPressed: _emailController.text.isNotEmpty && !_isCheckingDatabase 
+                                onPressed: _emailController.text.isNotEmpty && !_isCheckingDatabase
                                     ? () async {
-                                        // Validate email when user clicks button  
+                                        // Validate email when user clicks button
                                         await _validateEmail();
                                         // Navigate if validation passed
                                         if (_isEmailValid && _currentUser != null) {
-                                          _navigateToGame();
+                                          // Admins skip verification, others always need to verify
+                                          if (_currentUser!.isAdmin) {
+                                            _navigateToGame();
+                                          } else {
+                                            _showVerificationDialog(_currentUser!);
+                                          }
                                         }
                                       }
                                     : null,
@@ -453,18 +994,31 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      _currentUser?.isAdmin == true 
-                                          ? Icons.admin_panel_settings 
-                                          : Icons.sports_football, 
+                                      _currentUser?.isAdmin == true
+                                          ? Icons.admin_panel_settings
+                                          : Icons.sports_football,
                                       size: 28
                                     ),
                                     const SizedBox(width: 10),
-                                    Text(_currentUser?.isAdmin == true 
-                                        ? 'ADMIN DASHBOARD' 
+                                    Text(_currentUser?.isAdmin == true
+                                        ? 'ADMIN DASHBOARD'
                                         : 'ENTER THE GAME'),
                                     const SizedBox(width: 10),
                                     const Icon(Icons.arrow_forward, size: 28),
                                   ],
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              TextButton(
+                                onPressed: () => _showSignUpDialog(),
+                                child: Text(
+                                  "Don't have an account? Sign Up",
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.9),
+                                    fontSize: 16,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: Colors.white.withOpacity(0.9),
+                                  ),
                                 ),
                               ),
                                   ],

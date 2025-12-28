@@ -7,6 +7,7 @@ class UserModel {
   final bool hasPaid;
   final DateTime? createdAt;
   final bool hasSeenInstructions;
+  final bool emailVerified;
 
   UserModel({
     required this.id,
@@ -17,6 +18,7 @@ class UserModel {
     required this.hasPaid,
     this.createdAt,
     this.hasSeenInstructions = false,
+    this.emailVerified = false,
   });
 
   UserModel copyWith({
@@ -28,6 +30,7 @@ class UserModel {
     bool? hasPaid,
     DateTime? createdAt,
     bool? hasSeenInstructions,
+    bool? emailVerified,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -38,6 +41,7 @@ class UserModel {
       hasPaid: hasPaid ?? this.hasPaid,
       createdAt: createdAt ?? this.createdAt,
       hasSeenInstructions: hasSeenInstructions ?? this.hasSeenInstructions,
+      emailVerified: emailVerified ?? this.emailVerified,
     );
   }
 
@@ -51,6 +55,7 @@ class UserModel {
       'hasPaid': hasPaid,
       'createdAt': createdAt?.toIso8601String(),
       'hasSeenInstructions': hasSeenInstructions,
+      'emailVerified': emailVerified,
     };
   }
 
@@ -62,10 +67,11 @@ class UserModel {
       numEntries: json['numEntries'] as int? ?? 0,
       isAdmin: json['isAdmin'] as bool? ?? false,
       hasPaid: json['hasPaid'] as bool? ?? false,
-      createdAt: json['createdAt'] != null 
+      createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : null,
       hasSeenInstructions: json['hasSeenInstructions'] as bool? ?? false,
+      emailVerified: json['emailVerified'] as bool? ?? false,
     );
   }
   
@@ -77,10 +83,11 @@ class UserModel {
       numEntries: data['numEntries'] as int? ?? 0,
       isAdmin: data['isAdmin'] as bool? ?? false,
       hasPaid: data['hasPaid'] as bool? ?? false,
-      createdAt: data['createdAt'] != null 
+      createdAt: data['createdAt'] != null
           ? (data['createdAt'] as dynamic).toDate() as DateTime
           : null,
       hasSeenInstructions: data['hasSeenInstructions'] as bool? ?? false,
+      emailVerified: data['emailVerified'] as bool? ?? false,
     );
   }
   
@@ -93,6 +100,7 @@ class UserModel {
       'hasPaid': hasPaid,
       'createdAt': createdAt,
       'hasSeenInstructions': hasSeenInstructions,
+      'emailVerified': emailVerified,
     };
   }
 

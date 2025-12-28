@@ -15,6 +15,7 @@ import '../widgets/user_form_dialog.dart';
 import '../utils/date_formatter.dart';
 import 'welcome_screen.dart';
 import 'squares_game_page.dart';
+import '../main.dart';
 
 class AdminDashboard extends StatefulWidget {
   final UserModel currentUser;
@@ -325,21 +326,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  void _logout() async {
+  Future<void> _logout() async {
     // Clear storage
     await PlatformStorage.remove('sb_squares_user');
-    
+
     // Show confirmation and navigate back to login screen
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Logged out successfully'),
-        backgroundColor: _primaryColor,
-      ),
-    );
-    
-    // Navigate to login screen instead of trying to reload on mobile
     if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Logged out successfully'),
+          backgroundColor: _primaryColor,
+        ),
+      );
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LaunchPage()),
+        (route) => false,
+      );
     }
   }
 

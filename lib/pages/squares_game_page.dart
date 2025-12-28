@@ -13,6 +13,7 @@ import '../services/game_config_service.dart';
 import '../widgets/footer_widget.dart';
 import '../utils/user_color_generator.dart';
 import '../utils/platform_storage.dart';
+import '../main.dart';
 import 'admin_dashboard.dart';
 
 class SquaresGamePage extends StatefulWidget {
@@ -600,13 +601,19 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     );
   }
 
-  void _logout() async {
+  Future<void> _logout() async {
+    print('_logout called');
     // Clear storage
     await PlatformStorage.remove('sb_squares_user');
-    
+    print('Storage cleared, mounted: $mounted');
+
     // Navigate to login screen instead of trying to reload on mobile
     if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      print('Navigating to LaunchPage');
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LaunchPage()),
+        (route) => false,
+      );
     }
   }
 
@@ -631,6 +638,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (value) {
+              print('PopupMenu selected: $value');
               switch (value) {
                 case 'instructions':
                   _showInstructions();
@@ -838,11 +846,11 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                       border: Border.all(color: Colors.black),
                                     ),
                                     child: Text(
-                                      _currentBoardNumbers != null ? '${awayTeamNumbers[i]}' : '?',
+                                      _currentBoardNumbers != null ? '${awayTeamNumbers[i]}' : '',
                                       style: GoogleFonts.rubik(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 14,
-                                        color: _currentBoardNumbers != null ? Colors.blue.shade700 : Colors.grey,
+                                        color: Colors.blue.shade700,
                                       ),
                                     ),
                                   ),
@@ -897,11 +905,11 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                       border: Border.all(color: Colors.black),
                                     ),
                                     child: Text(
-                                      _currentBoardNumbers != null ? '${homeTeamNumbers[i]}' : '?',
+                                      _currentBoardNumbers != null ? '${homeTeamNumbers[i]}' : '',
                                       style: GoogleFonts.rubik(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 14,
-                                        color: _currentBoardNumbers != null ? Colors.red.shade700 : Colors.grey,
+                                        color: Colors.red.shade700,
                                       ),
                                     ),
                                   ),

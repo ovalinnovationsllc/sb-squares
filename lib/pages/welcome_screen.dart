@@ -4,19 +4,23 @@ import '../models/user_model.dart';
 import '../services/user_service.dart';
 import '../widgets/footer_widget.dart';
 import 'squares_game_page.dart';
+import '../main.dart';
 
 class WelcomeScreen extends StatelessWidget {
   final UserModel user;
 
   const WelcomeScreen({super.key, required this.user});
 
-  static void _logout(BuildContext context) async {
+  static Future<void> _logout(BuildContext context) async {
     // Clear storage
     await PlatformStorage.remove('sb_squares_user');
-    
+
     // Navigate to login screen instead of trying to reload on mobile
     if (context.mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LaunchPage()),
+        (route) => false,
+      );
     }
   }
 
