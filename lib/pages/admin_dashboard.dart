@@ -726,9 +726,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildBoardManagementSection() {
-    return Card(
-      elevation: 2,
-      child: Padding(
+    return SizedBox(
+      width: double.infinity,
+      child: Card(
+        elevation: 2,
+        child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -773,6 +775,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               style: TextStyle(fontSize: 14, color: _onSurfaceVariantColor),
             ),
           ],
+        ),
         ),
       ),
     );

@@ -97,41 +97,37 @@ class SquareSelectionService {
     required String userName,
   }) async {
     try {
+      // Use compositeKey as document ID to ensure atomic operations
       final compositeKey = 'Q$quarter-$row-$col';
-      
-      // Use a transaction to prevent race conditions
-      return await _firestore.runTransaction<bool>((transaction) async {
-        // First, check if this square is already taken
-        final querySnapshot = await _firestore
-            .collection(_collection)
-            .where('compositeKey', isEqualTo: compositeKey)
-            .limit(1)
-            .get();
+      final docRef = _firestore.collection(_collection).doc(compositeKey);
 
-        if (querySnapshot.docs.isNotEmpty) {
+      // Use a transaction with document-level locking to prevent race conditions
+      return await _firestore.runTransaction<bool>((transaction) async {
+        // Read the specific document within the transaction
+        final docSnapshot = await transaction.get(docRef);
+
+        if (docSnapshot.exists) {
           // Square already exists
-          final existingDoc = querySnapshot.docs.first;
           final existingSelection = SquareSelectionModel.fromFirestore(
-            existingDoc.data(),
-            existingDoc.id,
+            docSnapshot.data()!,
+            docSnapshot.id,
           );
-          
+
           if (existingSelection.userId != userId) {
             // Square taken by another user - transaction will fail
             print('Square already taken by ${existingSelection.userName}');
             return false;
           }
-          
+
           // User is deselecting their own square
-          transaction.delete(existingDoc.reference);
+          transaction.delete(docRef);
           print('Square deselected in transaction');
           return true;
         }
 
         // Square is available - create new selection
-        final docRef = _firestore.collection(_collection).doc();
         final selection = SquareSelectionModel(
-          id: docRef.id,
+          id: compositeKey,
           quarter: quarter,
           row: row,
           col: col,
