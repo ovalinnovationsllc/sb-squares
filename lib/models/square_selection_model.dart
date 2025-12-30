@@ -5,6 +5,7 @@ class SquareSelectionModel {
   final int col; // 0-9 (away team)
   final String userId; // User who selected this square
   final String userName; // Display name or email
+  final int entryNumber; // Which entry slot (1, 2, 3, etc.) for users with multiple entries
   final DateTime? selectedAt;
 
   SquareSelectionModel({
@@ -14,6 +15,7 @@ class SquareSelectionModel {
     required this.col,
     required this.userId,
     required this.userName,
+    this.entryNumber = 1,
     this.selectedAt,
   });
 
@@ -30,6 +32,7 @@ class SquareSelectionModel {
     int? col,
     String? userId,
     String? userName,
+    int? entryNumber,
     DateTime? selectedAt,
   }) {
     return SquareSelectionModel(
@@ -39,6 +42,7 @@ class SquareSelectionModel {
       col: col ?? this.col,
       userId: userId ?? this.userId,
       userName: userName ?? this.userName,
+      entryNumber: entryNumber ?? this.entryNumber,
       selectedAt: selectedAt ?? this.selectedAt,
     );
   }
@@ -50,6 +54,7 @@ class SquareSelectionModel {
       'col': col,
       'userId': userId,
       'userName': userName,
+      'entryNumber': entryNumber,
       'selectedAt': selectedAt ?? DateTime.now(),
       'compositeKey': compositeKey,
     };
@@ -63,7 +68,8 @@ class SquareSelectionModel {
       col: data['col'] as int? ?? 0,
       userId: data['userId'] as String? ?? '',
       userName: data['userName'] as String? ?? '',
-      selectedAt: data['selectedAt'] != null 
+      entryNumber: data['entryNumber'] as int? ?? 1,
+      selectedAt: data['selectedAt'] != null
           ? (data['selectedAt'] as dynamic).toDate() as DateTime
           : null,
     );

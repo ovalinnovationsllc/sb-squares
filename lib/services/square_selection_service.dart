@@ -95,6 +95,7 @@ class SquareSelectionService {
     required int col,
     required String userId,
     required String userName,
+    required int entryNumber,
   }) async {
     try {
       // Use compositeKey as document ID to ensure atomic operations
@@ -133,11 +134,12 @@ class SquareSelectionService {
           col: col,
           userId: userId,
           userName: userName,
+          entryNumber: entryNumber,
           selectedAt: DateTime.now(),
         );
 
         transaction.set(docRef, selection.toFirestore());
-        print('Square selected in transaction: Q$quarter ($row,$col) by $userName');
+        print('Square selected in transaction: Q$quarter ($row,$col) by $userName (entry #$entryNumber)');
         return true;
       });
     } catch (e) {

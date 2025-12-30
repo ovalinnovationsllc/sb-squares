@@ -1101,7 +1101,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   void _showEditTeamNamesDialog() {
     final homeController = TextEditingController(text: _currentConfig?.homeTeamName ?? 'AFC');
     final awayController = TextEditingController(text: _currentConfig?.awayTeamName ?? 'NFC');
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

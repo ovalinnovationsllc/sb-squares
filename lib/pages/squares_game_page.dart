@@ -39,11 +39,11 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   String _homeTeamName = 'AFC';
   String _awayTeamName = 'NFC';
   
-  // Separate selected squares for each quarter
-  final Map<String, String> q1SelectedSquares = {};
-  final Map<String, String> q2SelectedSquares = {};
-  final Map<String, String> q3SelectedSquares = {};
-  final Map<String, String> q4SelectedSquares = {};
+  // Separate selected squares for each quarter - now stores full model for entry number
+  final Map<String, SquareSelectionModel> q1SelectedSquares = {};
+  final Map<String, SquareSelectionModel> q2SelectedSquares = {};
+  final Map<String, SquareSelectionModel> q3SelectedSquares = {};
+  final Map<String, SquareSelectionModel> q4SelectedSquares = {};
   
   bool _isLoadingSelections = true;
   
@@ -76,16 +76,16 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
             q2SelectedSquares.clear();
             q3SelectedSquares.clear();
             q4SelectedSquares.clear();
-            
-            // Update with real-time data
+
+            // Update with real-time data - store full model for entry number
             for (final selection in selections) {
               final map = _getQuarterMap(selection.quarter);
-              map[selection.squareKey] = selection.userName;
+              map[selection.squareKey] = selection;
             }
-            
+
             _isLoadingSelections = false;
           });
-          
+
         }
       },
       onError: (error) {
@@ -161,7 +161,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
 
   void _onSquareTapped(int row, int col, int quarter) async {
     if (_isLoadingSelections) return; // Prevent taps while loading
-    
+
     // Check if user has paid - if not, show payment required message
     if (!widget.user.hasPaid) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -173,27 +173,27 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
       );
       return;
     }
-    
+
     final key = '$row-$col';
     final selectedSquares = _getQuarterMap(quarter);
     final userName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
-    
+
     // Check if square is already taken by another user
-    if (selectedSquares.containsKey(key) && selectedSquares[key] != userName) {
+    if (selectedSquares.containsKey(key) && selectedSquares[key]!.userName != userName) {
       // Square is taken by someone else, show message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('This square is already taken by ${selectedSquares[key]}'),
+          content: Text('This square is already taken by ${selectedSquares[key]!.userName}'),
           backgroundColor: Colors.red,
           duration: const Duration(seconds: 2),
         ),
       );
       return;
     }
-    
+
     // Check if user is trying to select a new square (not deselecting)
-    final isDeselecting = selectedSquares.containsKey(key) && selectedSquares[key] == userName;
-    
+    final isDeselecting = selectedSquares.containsKey(key) && selectedSquares[key]!.userName == userName;
+
     // Check if user has reached their limit for this quarter
     if (!isDeselecting && _getUserQuarterSelectionCount(quarter) >= widget.user.numEntries) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -205,15 +205,19 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
       );
       return;
     }
-    
+
+    // Calculate the next available entry number for this user in this quarter
+    final entryNumber = isDeselecting ? 1 : _getNextEntryNumber(quarter, userName);
+
     // Save to Firestore
-    print('Attempting to save selection: Q$quarter, ($row,$col) for user ${widget.user.id}');
+    print('Attempting to save selection: Q$quarter, ($row,$col) for user ${widget.user.id} (entry #$entryNumber)');
     final success = await _selectionService.saveSelection(
       quarter: quarter,
       row: row,
       col: col,
       userId: widget.user.id,
       userName: userName,
+      entryNumber: entryNumber,
     );
     
     print('Save result: $success');
@@ -250,7 +254,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     }
   }
   
-  Map<String, String> _getQuarterMap(int quarter) {
+  Map<String, SquareSelectionModel> _getQuarterMap(int quarter) {
     switch (quarter) {
       case 1:
         return q1SelectedSquares;
@@ -264,21 +268,47 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
         return q1SelectedSquares;
     }
   }
-  
+
   int _getUserSelectionsCount() {
     int count = 0;
     final userName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
-    count += q1SelectedSquares.values.where((v) => v == userName).length;
-    count += q2SelectedSquares.values.where((v) => v == userName).length;
-    count += q3SelectedSquares.values.where((v) => v == userName).length;
-    count += q4SelectedSquares.values.where((v) => v == userName).length;
+    count += q1SelectedSquares.values.where((v) => v.userName == userName).length;
+    count += q2SelectedSquares.values.where((v) => v.userName == userName).length;
+    count += q3SelectedSquares.values.where((v) => v.userName == userName).length;
+    count += q4SelectedSquares.values.where((v) => v.userName == userName).length;
     return count;
   }
-  
+
   int _getUserQuarterSelectionCount(int quarter) {
     final userName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
     final selectedSquares = _getQuarterMap(quarter);
-    return selectedSquares.values.where((v) => v == userName).length;
+    return selectedSquares.values.where((v) => v.userName == userName).length;
+  }
+
+  /// Get the next available entry number for this user in this quarter
+  int _getNextEntryNumber(int quarter, String userName) {
+    final selectedSquares = _getQuarterMap(quarter);
+    final userSelections = selectedSquares.values
+        .where((v) => v.userName == userName)
+        .map((v) => v.entryNumber)
+        .toSet();
+
+    // Find the lowest unused entry number starting from 1
+    for (int i = 1; i <= widget.user.numEntries; i++) {
+      if (!userSelections.contains(i)) {
+        return i;
+      }
+    }
+    // Fallback (shouldn't happen if limits are enforced)
+    return userSelections.length + 1;
+  }
+
+  /// Check if a user has multiple entries in the given quarter
+  bool _userHasMultipleEntriesInQuarter(int quarter, String? userName) {
+    if (userName == null) return false;
+    final selectedSquares = _getQuarterMap(quarter);
+    final count = selectedSquares.values.where((v) => v.userName == userName).length;
+    return count > 1;
   }
   
   String _getSquareType(int row, int col, int quarter) {
@@ -951,13 +981,15 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                 final key = '$row-$col';
                                 final isSelected = selectedSquares.containsKey(key);
                                 final squareType = _getSquareType(row, col, quarter);
-                                final squareOwner = selectedSquares[key];
-                                
+                                final selection = selectedSquares[key];
+                                final squareOwnerName = selection?.userName;
+                                final entryNumber = selection?.entryNumber ?? 1;
+
                                 // Determine the color based on square type and user
                                 Color backgroundColor;
                                 Color borderColor = Colors.black;
                                 double borderWidth = 0.5;
-                                
+
                                 if (squareType == 'winner') {
                                   backgroundColor = isSelected ? Colors.red.shade400 : Colors.red.shade200;
                                   borderColor = Colors.red.shade700;
@@ -972,22 +1004,25 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                   borderWidth = 1.0;
                                 } else {
                                   // Use user-specific colors for normal squares
-                                  if (isSelected && squareOwner != null) {
+                                  if (isSelected && squareOwnerName != null) {
                                     // Generate a unique color for each user based on their name
-                                    backgroundColor = UserColorGenerator.getColorForUser(squareOwner);
-                                    borderColor = UserColorGenerator.getDarkColorForUser(squareOwner);
-                                    
+                                    backgroundColor = UserColorGenerator.getColorForUser(squareOwnerName);
+                                    borderColor = UserColorGenerator.getDarkColorForUser(squareOwnerName);
+
                                     // If it's the current user's square, make it slightly different
                                     final currentUserName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
-                                    if (squareOwner == currentUserName) {
-                                      backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwner);
+                                    if (squareOwnerName == currentUserName) {
+                                      backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwnerName);
                                       borderWidth = 1.0;
                                     }
                                   } else {
                                     backgroundColor = Colors.white;
                                   }
                                 }
-                                
+
+                                // Circled number characters for entry badge
+                                const circledNumbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+
                                 return GestureDetector(
                                   onTap: () => _onSquareTapped(row, col, quarter),
                                   child: Opacity(
@@ -1002,14 +1037,15 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                       ),
                                     child: Stack(
                                       children: [
-                                        if (squareType != 'normal') 
+                                        // Prize badge for winning squares
+                                        if (squareType != 'normal')
                                           Positioned(
                                             top: 2,
                                             right: 2,
                                             child: Container(
                                               padding: const EdgeInsets.all(2),
                                               decoration: BoxDecoration(
-                                                color: squareType == 'winner' 
+                                                color: squareType == 'winner'
                                                   ? Colors.red.shade700
                                                   : squareType == 'adjacent'
                                                     ? Colors.amber.shade700
@@ -1017,7 +1053,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                                 borderRadius: BorderRadius.circular(4),
                                               ),
                                               child: Text(
-                                                squareType == 'winner' 
+                                                squareType == 'winner'
                                                   ? '\$2400'
                                                   : squareType == 'adjacent'
                                                     ? '\$150'
@@ -1030,18 +1066,37 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                               ),
                                             ),
                                           ),
+                                        // Entry number badge (bottom-left corner) - show if owner has multiple entries in this quarter
+                                        if (isSelected && selection != null && _userHasMultipleEntriesInQuarter(quarter, squareOwnerName))
+                                          Positioned(
+                                            bottom: 1,
+                                            left: 1,
+                                            child: Text(
+                                              entryNumber <= 10 ? circledNumbers[entryNumber - 1] : '$entryNumber',
+                                              style: TextStyle(
+                                                fontSize: cellSize * 0.18,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                                shadows: [
+                                                  Shadow(
+                                                    color: Colors.black.withOpacity(0.7),
+                                                    blurRadius: 2,
+                                                    offset: const Offset(0.5, 0.5),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        // Owner name in center
                                         Center(
-                                          child: isSelected 
+                                          child: isSelected && squareOwnerName != null
                                             ? Text(
-                                                selectedSquares[key]!,
+                                                squareOwnerName,
                                                 style: TextStyle(
                                                   fontSize: cellSize * 0.15,
                                                   fontWeight: FontWeight.w500,
-                                                  color: squareType != 'normal' 
-                                                    ? Colors.white 
-                                                    : Colors.white, // White text on colored backgrounds
+                                                  color: Colors.white,
                                                   shadows: [
-                                                    // Add subtle shadow for better readability
                                                     Shadow(
                                                       color: Colors.black.withOpacity(0.5),
                                                       blurRadius: 2,

@@ -10,6 +10,7 @@ import 'models/user_model.dart';
 import 'services/user_service.dart';
 import 'services/verification_service.dart';
 import 'utils/platform_storage.dart';
+import 'utils/blur_dialog.dart';
 import 'services/game_config_service.dart';
 import 'pages/admin_dashboard.dart';
 import 'pages/welcome_screen.dart';
@@ -300,7 +301,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
     bool isSubmitting = false;
     String? errorMessage;
 
-    showDialog(
+    showBlurDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
@@ -537,7 +538,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
 
     if (!mounted) return;
 
-    showDialog(
+    showBlurDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
