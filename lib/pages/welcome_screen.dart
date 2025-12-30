@@ -294,7 +294,7 @@ class WelcomeScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '* \$200 prize at half and final (reverse the number and add 5 to each)**',
+                            '* \$200 prize at half and final (reverse the number and add 5 to each) *',
                             style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                           ),
                           SizedBox(height: 8),

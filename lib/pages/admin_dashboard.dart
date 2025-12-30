@@ -2072,15 +2072,46 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
       );
 
       if (success) {
+        // Send winner notification emails
+        final notificationResult = await widget.gameScoreService.sendWinnerNotifications(
+          quarter: widget.quarter,
+          homeScore: homeScore,
+          awayScore: awayScore,
+        );
+
         widget.onScoreSaved();
+
+        // Get messenger before popping dialog
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
+
+        // Show notification result
+        if (notificationResult.emailsSent > 0) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('Score saved! ${notificationResult.emailsSent} winner email(s) sent.'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        } else if (notificationResult.success) {
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Score saved! No winners to notify.'),
+              backgroundColor: Colors.blue,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
       } else {
         _showError('Failed to save score');
       }
     } catch (e) {
       _showError('Error saving score: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

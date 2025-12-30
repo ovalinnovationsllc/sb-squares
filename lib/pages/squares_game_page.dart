@@ -387,13 +387,12 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
       builder: (context) => Dialog(
         child: Container(
           width: MediaQuery.of(context).size.width * 0.9,
-          height: MediaQuery.of(context).size.height * 0.85,
           constraints: const BoxConstraints(
-            maxWidth: 600,
-            maxHeight: 700,
+            maxWidth: 700,
           ),
           padding: const EdgeInsets.all(16.0),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -409,11 +408,9 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                 ],
               ),
               const Divider(),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
                       const Text(
                         'BUY A 2026 SUPER BOWL SQUARE - PLAY TO GET PAID',
                         style: TextStyle(
@@ -542,22 +539,44 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                       Container(
                         padding: const EdgeInsets.all(12.0),
                         decoration: BoxDecoration(
-                          color: Colors.red,
+                          color: Colors.purple,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
-                          'Cost \$150 per box - paying out large money! WINNERS ALL OVER',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                          textAlign: TextAlign.center,
+                        child: const Column(
+                          children: [
+                            Text(
+                              'SPECIAL BONUS - Halftime & Final Only!',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Reverse + 5 wins \$200',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'At Q2 & Q4: Reverse scores, add 5 to each, last digits win!\n'
+                              'Example: 10-3 → Reverse to 3-10 → Add 5 → 8-15 → Winner: 8 & 5',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                ],
               ),
             ],
           ),

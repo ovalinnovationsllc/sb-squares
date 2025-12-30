@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
 import '../models/game_score_model.dart';
 
 class GameScoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'game_scores';
+  static const String _functionsBaseUrl = 'https://us-central1-sb-squares-100ee.cloudfunctions.net';
   
   // Stream for real-time score updates
   Stream<List<GameScoreModel>> scoresStream() {
@@ -162,5 +165,48 @@ class GameScoreService {
         'diagonal': 100,
       }
     };
+  }
+
+  /// Send winner notification emails for a quarter score
+  /// Returns the number of emails sent, or -1 on error
+  Future<({bool success, String message, int emailsSent})> sendWinnerNotifications({
+    required int quarter,
+    required int homeScore,
+    required int awayScore,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_functionsBaseUrl/sendWinnerNotifications'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'data': {
+            'quarter': quarter,
+            'homeScore': homeScore,
+            'awayScore': awayScore,
+          }
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['result'] != null) {
+        final result = data['result'];
+        return (
+          success: result['success'] as bool? ?? false,
+          message: result['message'] as String? ?? 'Unknown result',
+          emailsSent: result['emailsSent'] as int? ?? 0,
+        );
+      } else {
+        final error = (data['error']?['message'] ?? 'Failed to send winner notifications').toString();
+        return (success: false, message: error, emailsSent: 0);
+      }
+    } catch (e) {
+      print('Error sending winner notifications: $e');
+      return (
+        success: false,
+        message: 'Failed to send winner notifications: $e',
+        emailsSent: 0,
+      );
+    }
   }
 }
