@@ -21,6 +21,9 @@ class FootballFieldLogo extends StatelessWidget {
     final logoWidth = (screenSize.width * 0.8).clamp(200.0, 600.0);
     final logoHeight = logoWidth * 0.5; // Maintain 2:1 aspect ratio
 
+    // Logo size at midfield (proportional to field height)
+    final midfieldLogoHeight = logoHeight * 0.35;
+
     return Container(
       width: logoWidth,
       height: logoHeight,
@@ -28,7 +31,7 @@ class FootballFieldLogo extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -36,12 +39,25 @@ class FootballFieldLogo extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: CustomPaint(
-          painter: FootballFieldPainter(
-            homeTeamName: homeTeamName,
-            awayTeamName: awayTeamName,
-          ),
-          size: Size(logoWidth, logoHeight),
+        child: Stack(
+          children: [
+            // Football field background
+            CustomPaint(
+              painter: FootballFieldPainter(
+                homeTeamName: homeTeamName,
+                awayTeamName: awayTeamName,
+              ),
+              size: Size(logoWidth, logoHeight),
+            ),
+            // Super Bowl logo at midfield
+            Center(
+              child: Image.asset(
+                'assets/images/super_bowl_logo.png',
+                height: midfieldLogoHeight,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -103,7 +119,7 @@ class FootballFieldPainter extends CustomPainter {
     
     // Draw alternating grass stripes for texture
     final stripePaint = Paint()
-      ..color = const Color(0xFF388E3C).withOpacity(0.3)
+      ..color = const Color(0xFF388E3C).withValues(alpha: 0.3)
       ..style = PaintingStyle.fill;
     
     for (int i = 0; i < 10; i += 2) {
@@ -128,10 +144,6 @@ class FootballFieldPainter extends CustomPainter {
       ..color = Colors.white
       ..strokeWidth = 3 * scaleFactor
       ..style = PaintingStyle.stroke;
-
-    final fillPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
 
     // Draw field border
     canvas.drawRect(
@@ -289,14 +301,14 @@ class FootballFieldPainter extends CustomPainter {
     // Draw hash marks every 5 yards
     for (int i = 0; i <= 20; i++) {
       final x = leftEndZone + (mainFieldWidth / 20) * i;
-      
+
       // Top hash marks
       canvas.drawLine(
         Offset(x, hashY1 - hashLength),
         Offset(x, hashY1 + hashLength),
         hashPaint,
       );
-      
+
       // Bottom hash marks
       canvas.drawLine(
         Offset(x, hashY2 - hashLength),
@@ -304,6 +316,7 @@ class FootballFieldPainter extends CustomPainter {
         hashPaint,
       );
     }
+
   }
 
   @override
