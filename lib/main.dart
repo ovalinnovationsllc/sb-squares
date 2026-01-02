@@ -21,14 +21,21 @@ import 'widgets/footer_widget.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Lock orientation to portrait on mobile devices
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
+
   // Initialize game configuration if it doesn't exist
   final configService = GameConfigService();
   await configService.createDefaultConfig();
-  
+
   runApp(const MyApp());
 }
 
