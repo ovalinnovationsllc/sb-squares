@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
+import '../utils/nfl_team_colors.dart';
 
 class FootballFieldLogo extends StatelessWidget {
-  const FootballFieldLogo({super.key});
+  final String homeTeamName;
+  final String awayTeamName;
+
+  const FootballFieldLogo({
+    super.key,
+    this.homeTeamName = 'HOME',
+    this.awayTeamName = 'AWAY',
+  });
 
   @override
   Widget build(BuildContext context) {
     // Get screen dimensions
     final screenSize = MediaQuery.of(context).size;
-    
+
     // Calculate responsive dimensions
     // Logo takes up 80% of screen width (max 600px) and maintains 2:1 aspect ratio
     final logoWidth = (screenSize.width * 0.8).clamp(200.0, 600.0);
     final logoHeight = logoWidth * 0.5; // Maintain 2:1 aspect ratio
-    
+
     return Container(
       width: logoWidth,
       height: logoHeight,
@@ -29,7 +37,10 @@ class FootballFieldLogo extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: CustomPaint(
-          painter: FootballFieldPainter(),
+          painter: FootballFieldPainter(
+            homeTeamName: homeTeamName,
+            awayTeamName: awayTeamName,
+          ),
           size: Size(logoWidth, logoHeight),
         ),
       ),
@@ -38,6 +49,21 @@ class FootballFieldLogo extends StatelessWidget {
 }
 
 class FootballFieldPainter extends CustomPainter {
+  final String homeTeamName;
+  final String awayTeamName;
+  final Color homeTeamPrimary;
+  final Color homeTeamSecondary;
+  final Color awayTeamPrimary;
+  final Color awayTeamSecondary;
+
+  FootballFieldPainter({
+    required this.homeTeamName,
+    required this.awayTeamName,
+  })  : homeTeamPrimary = NFLTeamColors.getPrimaryColor(homeTeamName),
+        homeTeamSecondary = NFLTeamColors.getSecondaryColor(homeTeamName),
+        awayTeamPrimary = NFLTeamColors.getPrimaryColor(awayTeamName),
+        awayTeamSecondary = NFLTeamColors.getSecondaryColor(awayTeamName);
+
   @override
   void paint(Canvas canvas, Size size) {
     // Dark green background
@@ -116,7 +142,23 @@ class FootballFieldPainter extends CustomPainter {
     // Draw end zones
     final leftEndZone = fieldLeft + endZoneWidth;
     final rightEndZone = fieldRight - endZoneWidth;
-    
+
+    // Fill end zones with team colors
+    final homeEndZonePaint = Paint()..color = homeTeamPrimary;
+    final awayEndZonePaint = Paint()..color = awayTeamPrimary;
+
+    // Left end zone (home team)
+    canvas.drawRect(
+      Rect.fromLTRB(fieldLeft, fieldTop, leftEndZone, fieldBottom),
+      homeEndZonePaint,
+    );
+
+    // Right end zone (away team)
+    canvas.drawRect(
+      Rect.fromLTRB(rightEndZone, fieldTop, fieldRight, fieldBottom),
+      awayEndZonePaint,
+    );
+
     // End zone lines
     canvas.drawLine(
       Offset(leftEndZone, fieldTop),
@@ -128,22 +170,22 @@ class FootballFieldPainter extends CustomPainter {
       Offset(rightEndZone, fieldBottom),
       thickLinePaint,
     );
-    
-    // Draw "END ZONE" text in end zones
+
+    // Draw team names in end zones
     final endZonePainter = TextPainter(textDirection: TextDirection.ltr);
-    
-    // Left end zone
+
+    // Left end zone - Home team
     endZonePainter.text = TextSpan(
-      text: 'END ZONE',
+      text: homeTeamName.toUpperCase(),
       style: TextStyle(
-        color: Colors.white,
+        color: homeTeamSecondary,
         fontSize: 14 * scaleFactor,
         fontWeight: FontWeight.bold,
         letterSpacing: 2,
       ),
     );
     endZonePainter.layout();
-    
+
     canvas.save();
     canvas.translate(fieldLeft + endZoneWidth / 2, fieldTop + fieldHeight / 2);
     canvas.rotate(-1.5708); // -90 degrees
@@ -152,8 +194,19 @@ class FootballFieldPainter extends CustomPainter {
       Offset(-endZonePainter.width / 2, -endZonePainter.height / 2),
     );
     canvas.restore();
-    
-    // Right end zone
+
+    // Right end zone - Away team
+    endZonePainter.text = TextSpan(
+      text: awayTeamName.toUpperCase(),
+      style: TextStyle(
+        color: awayTeamSecondary,
+        fontSize: 14 * scaleFactor,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 2,
+      ),
+    );
+    endZonePainter.layout();
+
     canvas.save();
     canvas.translate(fieldRight - endZoneWidth / 2, fieldTop + fieldHeight / 2);
     canvas.rotate(1.5708); // 90 degrees
@@ -254,5 +307,8 @@ class FootballFieldPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant FootballFieldPainter oldDelegate) {
+    return oldDelegate.homeTeamName != homeTeamName ||
+        oldDelegate.awayTeamName != awayTeamName;
+  }
 }

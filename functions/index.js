@@ -306,6 +306,229 @@ exports.sendWinnerNotifications = onCall(async (request) => {
   }
 });
 
+// Send admin summary email when Q4 (final) scores are entered
+exports.sendAdminSummary = onCall(async (request) => {
+  try {
+    // Get all admin users
+    const adminsSnapshot = await db.collection("users")
+      .where("isAdmin", "==", true)
+      .get();
+
+    if (adminsSnapshot.empty) {
+      console.log("No admin users found");
+      return { success: false, message: "No admin users found", emailsSent: 0 };
+    }
+
+    const adminEmails = [];
+    adminsSnapshot.forEach((doc) => {
+      const userData = doc.data();
+      if (userData.email) {
+        adminEmails.push(userData.email);
+      }
+    });
+
+    if (adminEmails.length === 0) {
+      return { success: false, message: "No admin emails found", emailsSent: 0 };
+    }
+
+    // Get active board numbers
+    const boardNumbersSnapshot = await db.collection("board_numbers")
+      .where("isActive", "==", true)
+      .limit(1)
+      .get();
+
+    if (boardNumbersSnapshot.empty) {
+      return { success: false, message: "No active board numbers", emailsSent: 0 };
+    }
+
+    const boardNumbers = boardNumbersSnapshot.docs[0].data();
+    const homeNumbers = boardNumbers.homeNumbers;
+    const awayNumbers = boardNumbers.awayNumbers;
+
+    // Get game config for team names
+    const configSnapshot = await db.collection("game_config")
+      .where("isActive", "==", true)
+      .limit(1)
+      .get();
+
+    let homeTeamName = "Home";
+    let awayTeamName = "Away";
+    if (!configSnapshot.empty) {
+      const config = configSnapshot.docs[0].data();
+      homeTeamName = config.homeTeamName || "Home";
+      awayTeamName = config.awayTeamName || "Away";
+    }
+
+    // Get all quarter scores
+    const scoresSnapshot = await db.collection("game_scores").get();
+    const scoresByQuarter = {};
+    scoresSnapshot.forEach((doc) => {
+      const data = doc.data();
+      scoresByQuarter[data.quarter] = data;
+    });
+
+    // Get all selections
+    const selectionsSnapshot = await db.collection("square_selections").get();
+    const selectionsByQuarterAndPosition = {};
+    selectionsSnapshot.forEach((doc) => {
+      const data = doc.data();
+      const key = `${data.quarter}-${data.row}-${data.col}`;
+      selectionsByQuarterAndPosition[key] = data;
+    });
+
+    // Calculate all winners for all quarters
+    const allWinners = [];
+    const quarterNames = ["", "Q1", "Q2 (Halftime)", "Q3", "Q4 (Final)"];
+    let grandTotal = 0;
+
+    for (let quarter = 1; quarter <= 4; quarter++) {
+      const score = scoresByQuarter[quarter];
+      if (!score) continue;
+
+      const homeLastDigit = score.homeScore % 10;
+      const awayLastDigit = score.awayScore % 10;
+      const winningRow = homeNumbers.indexOf(homeLastDigit);
+      const winningCol = awayNumbers.indexOf(awayLastDigit);
+
+      if (winningRow === -1 || winningCol === -1) continue;
+
+      // Define all winning positions for this quarter
+      const positions = [
+        { row: winningRow, col: winningCol, type: "Winner", prize: 2400 },
+        { row: (winningRow + 1) % 10, col: winningCol, type: "Adjacent", prize: 150 },
+        { row: (winningRow - 1 + 10) % 10, col: winningCol, type: "Adjacent", prize: 150 },
+        { row: winningRow, col: (winningCol + 1) % 10, type: "Adjacent", prize: 150 },
+        { row: winningRow, col: (winningCol - 1 + 10) % 10, type: "Adjacent", prize: 150 },
+        { row: (winningRow + 1) % 10, col: (winningCol + 1) % 10, type: "Diagonal", prize: 100 },
+        { row: (winningRow + 1) % 10, col: (winningCol - 1 + 10) % 10, type: "Diagonal", prize: 100 },
+        { row: (winningRow - 1 + 10) % 10, col: (winningCol + 1) % 10, type: "Diagonal", prize: 100 },
+        { row: (winningRow - 1 + 10) % 10, col: (winningCol - 1 + 10) % 10, type: "Diagonal", prize: 100 },
+      ];
+
+      // Add reverse +5 bonus for Q2 and Q4
+      if (quarter === 2 || quarter === 4) {
+        const bonusHomeDigit = (score.awayScore + 5) % 10;
+        const bonusAwayDigit = (score.homeScore + 5) % 10;
+        const bonusRow = homeNumbers.indexOf(bonusHomeDigit);
+        const bonusCol = awayNumbers.indexOf(bonusAwayDigit);
+        if (bonusRow !== -1 && bonusCol !== -1 && (bonusRow !== winningRow || bonusCol !== winningCol)) {
+          positions.push({ row: bonusRow, col: bonusCol, type: "Reverse+5", prize: 200 });
+        }
+      }
+
+      // Find winners for each position
+      for (const pos of positions) {
+        const key = `${quarter}-${pos.row}-${pos.col}`;
+        const selection = selectionsByQuarterAndPosition[key];
+        if (selection) {
+          allWinners.push({
+            quarter: quarterNames[quarter],
+            score: `${homeTeamName} ${score.homeScore} - ${awayTeamName} ${score.awayScore}`,
+            userName: selection.userName,
+            type: pos.type,
+            prize: pos.prize,
+          });
+          grandTotal += pos.prize;
+        }
+      }
+    }
+
+    // Group winners by quarter for the email
+    const winnersByQuarter = {};
+    for (const winner of allWinners) {
+      if (!winnersByQuarter[winner.quarter]) {
+        winnersByQuarter[winner.quarter] = {
+          score: winner.score,
+          winners: [],
+        };
+      }
+      winnersByQuarter[winner.quarter].winners.push(winner);
+    }
+
+    // Build the email HTML
+    let quarterSections = "";
+    for (const quarter of Object.keys(winnersByQuarter)) {
+      const qData = winnersByQuarter[quarter];
+      const winnerRows = qData.winners.map((w) =>
+        `<tr>
+          <td style="padding: 8px; border: 1px solid #ddd;">${w.userName}</td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${w.type}</td>
+          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${w.prize}</td>
+        </tr>`
+      ).join("");
+
+      const quarterTotal = qData.winners.reduce((sum, w) => sum + w.prize, 0);
+
+      quarterSections += `
+        <div style="margin-bottom: 25px;">
+          <h3 style="color: #1a472a; margin-bottom: 5px;">${quarter}</h3>
+          <p style="color: #666; margin: 0 0 10px 0;">${qData.score}</p>
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <thead>
+              <tr style="background: #1a472a; color: white;">
+                <th style="padding: 8px; text-align: left;">Winner</th>
+                <th style="padding: 8px; text-align: left;">Type</th>
+                <th style="padding: 8px; text-align: right;">Prize</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${winnerRows}
+            </tbody>
+            <tfoot>
+              <tr style="background: #f0f0f0; font-weight: bold;">
+                <td colspan="2" style="padding: 8px; border: 1px solid #ddd;">Quarter Total</td>
+                <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${quarterTotal}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      `;
+    }
+
+    const mailOptions = {
+      from: `"Super Bowl Squares" <${process.env.GMAIL_EMAIL}>`,
+      to: adminEmails.join(", "),
+      subject: "Super Bowl Squares - 2026 Final Summary",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #1a472a 0%, #228B22 100%); padding: 20px; text-align: center;">
+            <h1 style="color: #FFD700; margin: 0;">Super Bowl Squares - 2026</h1>
+            <p style="color: #fff; margin: 10px 0 0 0;">Game Summary Report</p>
+          </div>
+          <div style="padding: 30px; background: #f9f9f9;">
+            <div style="background: #FFD700; color: #1a472a; font-size: 24px; font-weight: bold; padding: 15px; text-align: center; border-radius: 10px; margin-bottom: 25px;">
+              Total Prizes Awarded: $${grandTotal}
+            </div>
+            ${quarterSections}
+          </div>
+          <div style="background: #1a472a; padding: 15px; text-align: center;">
+            <p style="color: #fff; margin: 0; font-size: 12px;">Super Bowl Squares - 2026 Game Complete</p>
+          </div>
+        </div>
+      `,
+    };
+
+    let emailsSent = 0;
+    try {
+      await transporter.sendMail(mailOptions);
+      emailsSent = adminEmails.length;
+      console.log(`Admin summary sent to ${adminEmails.join(", ")}`);
+    } catch (emailError) {
+      console.error("Failed to send admin summary email:", emailError);
+    }
+
+    return {
+      success: true,
+      message: "Admin summary sent",
+      emailsSent: emailsSent,
+      grandTotal: grandTotal,
+    };
+  } catch (error) {
+    console.error("Error sending admin summary:", error);
+    throw new HttpsError("internal", "Failed to send admin summary");
+  }
+});
+
 // Verify the code entered by user
 exports.verifyCode = onCall(async (request) => {
   const { userId, code } = request.data;

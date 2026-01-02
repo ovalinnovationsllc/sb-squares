@@ -2079,6 +2079,15 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
           awayScore: awayScore,
         );
 
+        // If this is Q4 (final), also send admin summary
+        String adminSummaryMessage = '';
+        if (widget.quarter == 4) {
+          final summaryResult = await widget.gameScoreService.sendAdminSummary();
+          if (summaryResult.success && summaryResult.emailsSent > 0) {
+            adminSummaryMessage = ' Admin summary sent.';
+          }
+        }
+
         widget.onScoreSaved();
 
         // Get messenger before popping dialog
@@ -2089,17 +2098,17 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
         if (notificationResult.emailsSent > 0) {
           messenger.showSnackBar(
             SnackBar(
-              content: Text('Score saved! ${notificationResult.emailsSent} winner email(s) sent.'),
+              content: Text('Score saved! ${notificationResult.emailsSent} winner email(s) sent.$adminSummaryMessage'),
               backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
+              duration: const Duration(seconds: 4),
             ),
           );
         } else if (notificationResult.success) {
           messenger.showSnackBar(
-            const SnackBar(
-              content: Text('Score saved! No winners to notify.'),
+            SnackBar(
+              content: Text('Score saved! No winners to notify.$adminSummaryMessage'),
               backgroundColor: Colors.blue,
-              duration: Duration(seconds: 2),
+              duration: const Duration(seconds: 3),
             ),
           );
         }
@@ -2131,62 +2140,112 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
     final homeDigit = homeScore % 10;
     final awayDigit = awayScore % 10;
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrow = screenWidth < 400;
+
     return AlertDialog(
-      title: Text('Quarter ${widget.quarter} Score'),
-      content: SizedBox(
-        width: 400,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _homeScoreController,
-                      decoration: const InputDecoration(
-                        labelText: 'Home Score',
-                        prefixIcon: Icon(Icons.home),
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Required';
-                        }
-                        final num = int.tryParse(value.trim());
-                        if (num == null || num < 0) {
-                          return 'Valid number >= 0';
-                        }
-                        return null;
-                      },
-                      onChanged: (value) => setState(() {}),
+      title: Text('Q${widget.quarter} Score'),
+      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 400,
+          maxHeight: MediaQuery.of(context).size.height * 0.6,
+        ),
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (isNarrow) ...[
+                  TextFormField(
+                    controller: _homeScoreController,
+                    decoration: const InputDecoration(
+                      labelText: 'Home Score',
+                      prefixIcon: Icon(Icons.home),
                     ),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Required';
+                      }
+                      final num = int.tryParse(value.trim());
+                      if (num == null || num < 0) {
+                        return 'Valid number >= 0';
+                      }
+                      return null;
+                    },
+                    onChanged: (value) => setState(() {}),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _awayScoreController,
-                      decoration: const InputDecoration(
-                        labelText: 'Away Score',
-                        prefixIcon: Icon(Icons.flight_takeoff),
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Required';
-                        }
-                        final num = int.tryParse(value.trim());
-                        if (num == null || num < 0) {
-                          return 'Valid number >= 0';
-                        }
-                        return null;
-                      },
-                      onChanged: (value) => setState(() {}),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _awayScoreController,
+                    decoration: const InputDecoration(
+                      labelText: 'Away Score',
+                      prefixIcon: Icon(Icons.flight_takeoff),
                     ),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Required';
+                      }
+                      final num = int.tryParse(value.trim());
+                      if (num == null || num < 0) {
+                        return 'Valid number >= 0';
+                      }
+                      return null;
+                    },
+                    onChanged: (value) => setState(() {}),
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _homeScoreController,
+                          decoration: const InputDecoration(
+                            labelText: 'Home Score',
+                            prefixIcon: Icon(Icons.home),
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Required';
+                            }
+                            final num = int.tryParse(value.trim());
+                            if (num == null || num < 0) {
+                              return 'Valid number >= 0';
+                            }
+                            return null;
+                          },
+                          onChanged: (value) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _awayScoreController,
+                          decoration: const InputDecoration(
+                            labelText: 'Away Score',
+                            prefixIcon: Icon(Icons.flight_takeoff),
+                          ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Required';
+                            }
+                            final num = int.tryParse(value.trim());
+                            if (num == null || num < 0) {
+                              return 'Valid number >= 0';
+                            }
+                            return null;
+                          },
+                          onChanged: (value) => setState(() {}),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              ),
               const SizedBox(height: 20),
               if (_homeScoreController.text.isNotEmpty && _awayScoreController.text.isNotEmpty) ...[
                 Container(
@@ -2221,18 +2280,17 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        'Payouts: Winner \$2,400 | Adjacent \$150 | Diagonal \$100 | Reverse \$200 (Q2/Q4)',
-                        style: TextStyle(fontSize: 12, color: _onSurfaceVariantColor),
-                      ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 16),
               ],
             ],
           ),
         ),
+        ),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(),

@@ -38,7 +38,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Super Bowl Squares',
+      title: 'Super Bowl Squares - 2026',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
@@ -72,6 +72,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   final TextEditingController _emailController = TextEditingController();
   final UserService _userService = UserService();
   final VerificationService _verificationService = VerificationService();
+  final GameConfigService _configService = GameConfigService();
   bool _isEmailValid = false;
   String? _emailError;
   bool _isCheckingDatabase = false;
@@ -79,6 +80,9 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   UserModel? _currentUser;
   Timer? _debounceTimer;
   Timer? _errorClearTimer;
+  StreamSubscription? _configSubscription;
+  String _homeTeamName = 'HOME';
+  String _awayTeamName = 'AWAY';
 
   @override
   void initState() {
@@ -108,17 +112,28 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
     ));
     
     _controller.forward();
-    
+
+    // Listen to config changes for team names
+    _configSubscription = _configService.configStream().listen((config) {
+      if (mounted) {
+        setState(() {
+          _homeTeamName = config.homeTeamName;
+          _awayTeamName = config.awayTeamName;
+        });
+      }
+    });
+
     // Check for saved authentication on startup
     _checkSavedAuthentication();
   }
 
   @override
   void dispose() {
-    // Cancel timers to prevent setState() after dispose
+    // Cancel timers and subscriptions to prevent setState() after dispose
     _debounceTimer?.cancel();
     _errorClearTimer?.cancel();
-    
+    _configSubscription?.cancel();
+
     // Dispose controllers and animations
     _controller.dispose();
     _emailController.dispose();
@@ -862,7 +877,10 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                   children: [
                               const SuperBowlBanner(),
                               const SizedBox(height: 20),
-                              const FootballFieldLogo(),
+                              FootballFieldLogo(
+                                homeTeamName: _homeTeamName,
+                                awayTeamName: _awayTeamName,
+                              ),
                               const SizedBox(height: 40),
                               Container(
                                 width: MediaQuery.of(context).size.width * 0.9,

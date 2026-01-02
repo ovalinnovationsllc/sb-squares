@@ -209,4 +209,36 @@ class GameScoreService {
       );
     }
   }
+
+  // Send admin summary email with all winners (called after Q4)
+  Future<({bool success, String message, int emailsSent})> sendAdminSummary() async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_functionsBaseUrl/sendAdminSummary'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'data': {}}),
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['result'] != null) {
+        final result = data['result'];
+        return (
+          success: result['success'] as bool? ?? false,
+          message: result['message'] as String? ?? 'Unknown result',
+          emailsSent: result['emailsSent'] as int? ?? 0,
+        );
+      } else {
+        final error = (data['error']?['message'] ?? 'Failed to send admin summary').toString();
+        return (success: false, message: error, emailsSent: 0);
+      }
+    } catch (e) {
+      print('Error sending admin summary: $e');
+      return (
+        success: false,
+        message: 'Failed to send admin summary: $e',
+        emailsSent: 0,
+      );
+    }
+  }
 }

@@ -13,6 +13,7 @@ import '../services/game_config_service.dart';
 import '../widgets/footer_widget.dart';
 import '../utils/user_color_generator.dart';
 import '../utils/platform_storage.dart';
+import '../utils/nfl_team_colors.dart';
 import '../main.dart';
 import 'admin_dashboard.dart';
 
@@ -161,6 +162,18 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
 
   void _onSquareTapped(int row, int col, int quarter) async {
     if (_isLoadingSelections) return; // Prevent taps while loading
+
+    // Check if board is locked (numbers have been randomized)
+    if (_currentBoardNumbers != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Board is locked. Squares cannot be changed after numbers are drawn.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
 
     // Check if user has paid - if not, show payment required message
     if (!widget.user.hasPaid) {
@@ -359,6 +372,33 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     if (row == homeRow && col == awayCol) {
       print('✅ WINNER FOUND at Grid ($row,$col) - Numbers: ${homeNumbers[row]}-${awayNumbers[col]}');
       return 'winner';
+    }
+
+    // Check for Reverse +5 bonus winner (Q2 and Q4 only)
+    if (quarter == 2 || quarter == 4) {
+      // Reverse scores and add 5, then take last digit
+      final reversedHomeDigit = (score.awayScore + 5) % 10;
+      final reversedAwayDigit = (score.homeScore + 5) % 10;
+
+      // Find grid position for the bonus winner
+      int? bonusHomeRow, bonusAwayCol;
+      for (int i = 0; i < homeNumbers.length; i++) {
+        if (homeNumbers[i] == reversedHomeDigit) {
+          bonusHomeRow = i;
+          break;
+        }
+      }
+      for (int i = 0; i < awayNumbers.length; i++) {
+        if (awayNumbers[i] == reversedAwayDigit) {
+          bonusAwayCol = i;
+          break;
+        }
+      }
+
+      if (bonusHomeRow != null && bonusAwayCol != null && row == bonusHomeRow && col == bonusAwayCol) {
+        print('🏆 REVERSE +5 BONUS at Grid ($row,$col) - Numbers: ${homeNumbers[row]}-${awayNumbers[col]}');
+        return 'reverse_bonus';
+      }
     }
     
     // Check if this is an adjacent square (up, down, left, right) - wrapping around edges
@@ -596,25 +636,25 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildInstructionCell('Diagonal\n\$100', Colors.blue[100]!),
-              _buildInstructionCell('Adjacent\n\$150', Colors.grey[200]!),
-              _buildInstructionCell('Diagonal\n\$100', Colors.blue[100]!),
+              _buildInstructionCell('Diagonal\n\$100', Colors.red[200]!),
+              _buildInstructionCell('Adjacent\n\$150', Colors.blue[200]!),
+              _buildInstructionCell('Diagonal\n\$100', Colors.red[200]!),
             ],
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildInstructionCell('Adjacent\n\$150', Colors.grey[200]!),
-              _buildInstructionCell('WINNER\n\$2400', Colors.red[200]!),
-              _buildInstructionCell('Adjacent\n\$150', Colors.grey[200]!),
+              _buildInstructionCell('Adjacent\n\$150', Colors.blue[200]!),
+              _buildInstructionCell('WINNER\n\$2400', Colors.green[300]!),
+              _buildInstructionCell('Adjacent\n\$150', Colors.blue[200]!),
             ],
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildInstructionCell('Diagonal\n\$100', Colors.blue[100]!),
-              _buildInstructionCell('Adjacent\n\$150', Colors.grey[200]!),
-              _buildInstructionCell('Diagonal\n\$100', Colors.blue[100]!),
+              _buildInstructionCell('Diagonal\n\$100', Colors.red[200]!),
+              _buildInstructionCell('Adjacent\n\$150', Colors.blue[200]!),
+              _buildInstructionCell('Diagonal\n\$100', Colors.red[200]!),
             ],
           ),
         ],
@@ -672,7 +712,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Super Bowl Squares'),
+        title: const Text('Super Bowl Squares - 2026'),
         centerTitle: true,
         bottom: TabBar(
           controller: _tabController,
@@ -812,9 +852,40 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
               child: widget.user.hasPaid
-                  ? Text(
-                      '${_getUserQuarterSelectionCount(quarter)} of ${widget.user.numEntries} square${widget.user.numEntries != 1 ? 's' : ''} selected',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '${_getUserQuarterSelectionCount(quarter)} of ${widget.user.numEntries} square${widget.user.numEntries != 1 ? 's' : ''} selected',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                        ),
+                        if (_currentBoardNumbers != null) ...[
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade100,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.red.shade300),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.lock, size: 14, color: Colors.red.shade700),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'LOCKED',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     )
                   : Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -847,7 +918,15 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                   builder: (context, constraints) {
                     final double gridSize = constraints.maxWidth;
                     final double cellSize = gridSize / 11;
-                      
+
+                    // Get NFL team colors
+                    final homeColors = NFLTeamColors.getTeamColors(_homeTeamName);
+                    final awayColors = NFLTeamColors.getTeamColors(_awayTeamName);
+                    final homePrimary = homeColors?.primary ?? Colors.red.shade700;
+                    final homeLight = homeColors?.primary.withValues(alpha: 0.3) ?? Colors.red.shade100;
+                    final awayPrimary = awayColors?.primary ?? Colors.blue.shade700;
+                    final awayLight = awayColors?.primary.withValues(alpha: 0.3) ?? Colors.blue.shade100;
+
                     return Stack(
                       children: [
                         // Away team label (top, spread horizontally)
@@ -859,7 +938,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                             height: cellSize * 0.4,
                             child: Wrap(
                               alignment: WrapAlignment.spaceEvenly,
-                              children: _awayTeamName.toUpperCase().split('').map((letter) => 
+                              children: _awayTeamName.toUpperCase().split('').map((letter) =>
                                 Padding(
                                   padding: EdgeInsets.symmetric(horizontal: cellSize * 0.02),
                                   child: Text(
@@ -867,7 +946,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                     style: GoogleFonts.rubik(
                                       fontSize: cellSize * 0.25,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.blue.shade700,
+                                      color: awayPrimary,
                                       height: 1.0,
                                     ),
                                   ),
@@ -876,7 +955,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                             ),
                           ),
                         ),
-                        
+
                         Positioned(
                           top: cellSize * 0.6,
                           left: cellSize,
@@ -891,7 +970,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                     height: cellSize * 0.4,
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
-                                      color: Colors.blue.shade100,
+                                      color: awayLight,
                                       border: Border.all(color: Colors.black),
                                     ),
                                     child: Text(
@@ -899,7 +978,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                       style: GoogleFonts.rubik(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 14,
-                                        color: Colors.blue.shade700,
+                                        color: awayPrimary,
                                       ),
                                     ),
                                   ),
@@ -907,7 +986,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                             ),
                           ),
                         ),
-                        
+
                         // Home team label (left side, vertical)
                         Positioned(
                           top: cellSize * 1.2,
@@ -918,7 +997,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                             child: Wrap(
                               direction: Axis.vertical,
                               alignment: WrapAlignment.spaceEvenly,
-                              children: _homeTeamName.toUpperCase().split('').map((letter) => 
+                              children: _homeTeamName.toUpperCase().split('').map((letter) =>
                                 Padding(
                                   padding: EdgeInsets.symmetric(vertical: cellSize * 0.02),
                                   child: Text(
@@ -926,7 +1005,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                     style: GoogleFonts.rubik(
                                       fontSize: cellSize * 0.25,
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.red.shade700,
+                                      color: homePrimary,
                                       height: 1.0,
                                     ),
                                   ),
@@ -935,7 +1014,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                             ),
                           ),
                         ),
-                        
+
                         Positioned(
                           top: cellSize,
                           left: cellSize * 0.6,
@@ -950,7 +1029,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                     height: cellSize,
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
-                                      color: Colors.red.shade100,
+                                      color: homeLight,
                                       border: Border.all(color: Colors.black),
                                     ),
                                     child: Text(
@@ -958,7 +1037,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                       style: GoogleFonts.rubik(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 14,
-                                        color: Colors.red.shade700,
+                                        color: homePrimary,
                                       ),
                                     ),
                                   ),
@@ -1009,17 +1088,22 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                 Color borderColor = Colors.black;
                                 double borderWidth = 0.5;
 
-                                if (squareType == 'winner') {
-                                  backgroundColor = isSelected ? Colors.red.shade400 : Colors.red.shade200;
-                                  borderColor = Colors.red.shade700;
+                                if (squareType == 'reverse_bonus') {
+                                  // Gold for Reverse +5 bonus winners (Q2 and Q4)
+                                  backgroundColor = isSelected ? const Color(0xFFFFD700) : const Color(0xFFFFE55C);
+                                  borderColor = const Color(0xFFB8860B); // Dark goldenrod
+                                  borderWidth = 3.0;
+                                } else if (squareType == 'winner') {
+                                  backgroundColor = isSelected ? Colors.green.shade500 : Colors.green.shade300;
+                                  borderColor = Colors.green.shade800;
                                   borderWidth = 2.0;
                                 } else if (squareType == 'adjacent') {
-                                  backgroundColor = isSelected ? Colors.amber.shade400 : Colors.amber.shade200;
-                                  borderColor = Colors.amber.shade700;
+                                  backgroundColor = isSelected ? Colors.blue.shade400 : Colors.blue.shade200;
+                                  borderColor = Colors.blue.shade700;
                                   borderWidth = 1.5;
                                 } else if (squareType == 'diagonal') {
-                                  backgroundColor = isSelected ? Colors.blue.shade300 : Colors.blue.shade200;
-                                  borderColor = Colors.blue.shade600;
+                                  backgroundColor = isSelected ? Colors.red.shade400 : Colors.red.shade200;
+                                  borderColor = Colors.red.shade700;
                                   borderWidth = 1.0;
                                 } else {
                                   // Use user-specific colors for normal squares
@@ -1064,19 +1148,23 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                             child: Container(
                                               padding: const EdgeInsets.all(2),
                                               decoration: BoxDecoration(
-                                                color: squareType == 'winner'
-                                                  ? Colors.red.shade700
-                                                  : squareType == 'adjacent'
-                                                    ? Colors.amber.shade700
-                                                    : Colors.blue.shade700,
+                                                color: squareType == 'reverse_bonus'
+                                                  ? const Color(0xFFB8860B) // Dark goldenrod
+                                                  : squareType == 'winner'
+                                                    ? Colors.green.shade800
+                                                    : squareType == 'adjacent'
+                                                      ? Colors.blue.shade700
+                                                      : Colors.red.shade700,
                                                 borderRadius: BorderRadius.circular(4),
                                               ),
                                               child: Text(
-                                                squareType == 'winner'
-                                                  ? '\$2400'
-                                                  : squareType == 'adjacent'
-                                                    ? '\$150'
-                                                    : '\$100',
+                                                squareType == 'reverse_bonus'
+                                                  ? '\$200'
+                                                  : squareType == 'winner'
+                                                    ? '\$2400'
+                                                    : squareType == 'adjacent'
+                                                      ? '\$150'
+                                                      : '\$100',
                                                 style: GoogleFonts.rubik(
                                                   color: Colors.white,
                                                   fontSize: 8,
