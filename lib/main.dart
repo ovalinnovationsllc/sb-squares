@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,8 +10,12 @@ import 'config/security_config.dart';
 import 'models/user_model.dart';
 import 'services/user_service.dart';
 import 'services/verification_service.dart';
+import 'services/version_service.dart';
+import 'services/square_selection_service.dart';
 import 'utils/platform_storage.dart';
 import 'utils/blur_dialog.dart';
+import 'utils/web_reload_stub.dart'
+    if (dart.library.html) 'utils/web_reload.dart';
 import 'services/game_config_service.dart';
 import 'pages/admin_dashboard.dart';
 import 'pages/welcome_screen.dart';
@@ -80,6 +85,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   final UserService _userService = UserService();
   final VerificationService _verificationService = VerificationService();
   final GameConfigService _configService = GameConfigService();
+  final VersionService _versionService = VersionService();
   bool _isEmailValid = false;
   String? _emailError;
   bool _isCheckingDatabase = false;
@@ -88,8 +94,10 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   Timer? _debounceTimer;
   Timer? _errorClearTimer;
   StreamSubscription? _configSubscription;
+  StreamSubscription<bool>? _versionSubscription;
   String _homeTeamName = 'HOME';
   String _awayTeamName = 'AWAY';
+  bool _updateAvailable = false;
 
   @override
   void initState() {
@@ -130,8 +138,28 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
       }
     });
 
+    // Listen to version stream for update notifications
+    _versionSubscription = _versionService.versionStream().listen(
+      (updateAvailable) {
+        if (mounted && updateAvailable != _updateAvailable) {
+          setState(() {
+            _updateAvailable = updateAvailable;
+          });
+        }
+      },
+      onError: (error) {
+        print('Error in version stream: $error');
+      },
+    );
+
     // Check for saved authentication on startup
     _checkSavedAuthentication();
+  }
+
+  void _reloadPage() {
+    if (kIsWeb) {
+      reloadWebPage();
+    }
   }
 
   @override
@@ -140,6 +168,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
     _debounceTimer?.cancel();
     _errorClearTimer?.cancel();
     _configSubscription?.cancel();
+    _versionSubscription?.cancel();
 
     // Dispose controllers and animations
     _controller.dispose();
@@ -315,13 +344,28 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
     );
   }
 
-  void _showSignUpDialog() {
+  void _showSignUpDialog() async {
     final formKey = GlobalKey<FormState>();
     final emailController = TextEditingController();
     final displayNameController = TextEditingController();
-    final entriesController = TextEditingController(text: '1');
+    final entriesController = TextEditingController();
     bool isSubmitting = false;
     String? errorMessage;
+    int squaresUsed = 0;
+    int remainingEntries = 100;
+    const int maxTotalEntries = 100;
+
+    // Fetch actual squares used from selections
+    final selectionService = SquareSelectionService();
+    try {
+      squaresUsed = await selectionService.getUniqueSquaresCount();
+      remainingEntries = maxTotalEntries - squaresUsed;
+      if (remainingEntries < 0) remainingEntries = 0;
+    } catch (e) {
+      print('Error fetching squares count: $e');
+    }
+
+    if (!mounted) return;
 
     showBlurDialog(
       context: context,
@@ -354,6 +398,41 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Show remaining entries info
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: remainingEntries > 0
+                              ? Colors.green.withOpacity(0.2)
+                              : Colors.red.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: remainingEntries > 0 ? Colors.green : Colors.redAccent,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              remainingEntries > 0 ? Icons.check_circle : Icons.error,
+                              color: remainingEntries > 0 ? Colors.green : Colors.redAccent,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                remainingEntries > 0
+                                    ? '$remainingEntries of $maxTotalEntries entries available'
+                                    : 'All entries have been claimed!',
+                                style: TextStyle(
+                                  color: remainingEntries > 0 ? Colors.green : Colors.redAccent,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       if (errorMessage != null)
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -376,65 +455,70 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                             ],
                           ),
                         ),
-                      TextFormField(
-                        controller: emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: _signUpInputDecoration('Email', Icons.email),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Email is required';
-                          }
-                          final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
-                          if (!emailRegex.hasMatch(value.trim())) {
-                            return 'Please enter a valid email';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: displayNameController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: _signUpInputDecoration('Display Name', Icons.person),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Display name is required';
-                          }
-                          if (value.trim().length < 2) {
-                            return 'Name must be at least 2 characters';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: entriesController,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: _signUpInputDecoration('Number of Entries', Icons.grid_view),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Number of entries is required';
-                          }
-                          final entries = int.tryParse(value.trim());
-                          if (entries == null) {
-                            return 'Please enter a valid number';
-                          }
-                          if (entries < 1 || entries > 100) {
-                            return 'Entries must be between 1 and 100';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Each entry costs \$150',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 12,
+                      if (remainingEntries > 0) ...[
+                        TextFormField(
+                          controller: emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: _signUpInputDecoration('Email', Icons.email),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Email is required';
+                            }
+                            final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,}$');
+                            if (!emailRegex.hasMatch(value.trim())) {
+                              return 'Please enter a valid email';
+                            }
+                            return null;
+                          },
                         ),
-                      ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: displayNameController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: _signUpInputDecoration('Display Name', Icons.person),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Display name is required';
+                            }
+                            if (value.trim().length < 2) {
+                              return 'Name must be at least 2 characters';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: entriesController,
+                          keyboardType: TextInputType.number,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: _signUpInputDecoration(
+                            'Number of Entries',
+                            Icons.grid_view,
+                          ),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Number of entries is required';
+                            }
+                            final entries = int.tryParse(value.trim());
+                            if (entries == null || entries < 1) {
+                              return 'Please enter a valid number (1 or more)';
+                            }
+                            if (entries > remainingEntries) {
+                              return 'Only $remainingEntries entries available';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Each entry costs \$150',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -443,14 +527,15 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                 TextButton(
                   onPressed: isSubmitting ? null : () => Navigator.of(dialogContext).pop(),
                   child: Text(
-                    'Cancel',
+                    remainingEntries > 0 ? 'Cancel' : 'Close',
                     style: TextStyle(color: Colors.white.withOpacity(0.7)),
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: isSubmitting
-                      ? null
-                      : () async {
+                if (remainingEntries > 0)
+                  ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
                           if (!formKey.currentState!.validate()) return;
 
                           setDialogState(() {
@@ -844,7 +929,38 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      body: Container(
+      body: Column(
+        children: [
+          // Update available banner
+          if (_updateAvailable)
+            Material(
+              color: Colors.blue.shade700,
+              child: InkWell(
+                onTap: _reloadPage,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  child: SafeArea(
+                    bottom: false,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.system_update, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Update available - Tap to refresh',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.refresh, color: Colors.white, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Expanded(
+            child: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -1065,6 +1181,9 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
             ),
           ),
         ),
+      ),
+          ),
+        ],
       ),
     );
   }

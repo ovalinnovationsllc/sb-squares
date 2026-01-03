@@ -5,7 +5,7 @@ class VersionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // App version string - update this when deploying new versions
-  static const String appVersion = '0.0.12';
+  static const String appVersion = '0.1.0';
 
   // Timestamp when this instance of the app was loaded
   static final DateTime _appLoadedAt = DateTime.now();

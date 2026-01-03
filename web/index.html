@@ -30,7 +30,7 @@
   <link rel="icon" type="image/png" href="favicon.png"/>
 
   <title>Super Bowl Squares - 2026</title>
-  <link rel="manifest" href="manifest.json">
+  <!-- PWA disabled - manifest removed to prevent caching issues -->
   
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
@@ -38,6 +38,26 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
+  <script>
+    // Unregister all service workers and clear caches to disable PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for (let registration of registrations) {
+          registration.unregister().then(function() {
+            console.log('Service worker unregistered');
+          });
+        }
+      });
+    }
+    // Clear all caches
+    if ('caches' in window) {
+      caches.keys().then(function(names) {
+        for (let name of names) {
+          caches.delete(name);
+        }
+      });
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

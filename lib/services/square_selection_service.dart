@@ -4,7 +4,24 @@ import '../models/square_selection_model.dart';
 class SquareSelectionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final String _collection = 'square_selections';
-  
+
+  /// Count unique squares selected (unique row-col combinations)
+  /// This represents how many of the 100 board positions are claimed
+  Future<int> getUniqueSquaresCount() async {
+    try {
+      // Get Q1 selections - these represent the unique squares claimed
+      // (each position in Q1 = one unique entry on the board)
+      final QuerySnapshot result = await _firestore
+          .collection(_collection)
+          .where('quarter', isEqualTo: 1)
+          .get();
+      return result.docs.length;
+    } catch (e) {
+      print('Error counting unique squares: $e');
+      return 0;
+    }
+  }
+
   // Stream for real-time updates
   Stream<List<SquareSelectionModel>> selectionsStream() {
     return _firestore
