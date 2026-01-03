@@ -10,6 +10,7 @@ import '../services/game_score_service.dart';
 import '../services/square_selection_service.dart';
 import '../services/board_numbers_service.dart';
 import '../services/game_config_service.dart';
+import '../services/version_service.dart';
 import '../widgets/footer_widget.dart';
 import '../widgets/user_form_dialog.dart';
 import '../utils/date_formatter.dart';
@@ -32,6 +33,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final SquareSelectionService _selectionService = SquareSelectionService();
   final BoardNumbersService _boardNumbersService = BoardNumbersService();
   final GameConfigService _configService = GameConfigService();
+  final VersionService _versionService = VersionService();
   final TextEditingController _searchController = TextEditingController();
   List<UserModel> _users = [];
   List<UserModel> _filteredUsers = [];
@@ -352,7 +354,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('Admin Dashboard'),
+        title: Column(
+          children: [
+            const Text('Admin Dashboard'),
+            Text(
+              'v${VersionService.appVersion}',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
         centerTitle: true,
         actions: [
           PopupMenuButton<String>(
@@ -767,11 +780,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _publishAppUpdate,
+                      icon: const Icon(Icons.system_update, size: 16),
+                      label: Text(MediaQuery.of(context).size.width > 600 ? 'Publish Update' : 'Publish'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade700,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 12),
             Text(
-              'Use this section to manage the game. Clear squares to remove selections, or clear all users to reset the entire system.',
+              'Use this section to manage the game. Clear squares to remove selections, clear all users to reset, or publish an update to notify all users to refresh.',
               style: TextStyle(fontSize: 14, color: _onSurfaceVariantColor),
             ),
           ],
@@ -779,6 +808,70 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ),
       ),
     );
+  }
+
+  void _publishAppUpdate() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Publish App Update'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This will notify all users to refresh their app.\n\n'
+              'Anyone who loaded the app before now will see an "Update available" banner.',
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Use this after deploying new code to notify users.',
+                      style: TextStyle(color: Colors.blue.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Publish Update'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await _versionService.publishUpdate();
+
+      if (success) {
+        _showSnackBar('Update published! All users will be notified to refresh.');
+      } else {
+        _showSnackBar('Failed to publish update', isError: true);
+      }
+    }
   }
 
   void _clearAllBoardSelections() async {

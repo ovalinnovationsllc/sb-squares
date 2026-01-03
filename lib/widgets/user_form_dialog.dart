@@ -136,6 +136,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
                     prefixIcon: Icon(Icons.email),
                   ),
                   keyboardType: TextInputType.emailAddress,
+                  textCapitalization: TextCapitalization.none,
+                  autocorrect: false,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
                       return 'Email is required';

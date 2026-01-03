@@ -205,12 +205,12 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
         _userExists = true;
       });
 
-      // Auto-navigate only for admins, others need to verify every time
+      // Auto-navigate if admin or already verified
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (savedUser.isAdmin) {
+        if (savedUser.isAdmin || savedUser.emailVerified) {
           _navigateToGame();
         }
-        // Non-admins stay on login page - they need to verify every time
+        // Unverified non-admins stay on login page
       });
     }
   }
@@ -813,6 +813,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                             // Navigate to the game
                             _navigateToGame();
                           } else {
+                            codeController.clear();
                             setDialogState(() {
                               isVerifying = false;
                               errorMessage = result.message;
@@ -898,6 +899,8 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                     TextField(
                                       controller: _emailController,
                                       keyboardType: TextInputType.emailAddress,
+                                      textCapitalization: TextCapitalization.none,
+                                      autocorrect: false,
                                       enabled: !_isCheckingDatabase,
                                       maxLength: 100,
                                       style: const TextStyle(color: Colors.white),

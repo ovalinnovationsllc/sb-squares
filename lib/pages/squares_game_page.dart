@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import '../utils/web_reload_stub.dart'
+    if (dart.library.html) '../utils/web_reload.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
 import '../models/game_score_model.dart';
@@ -10,6 +13,7 @@ import '../services/game_score_service.dart';
 import '../services/square_selection_service.dart';
 import '../services/board_numbers_service.dart';
 import '../services/game_config_service.dart';
+import '../services/version_service.dart';
 import '../widgets/footer_widget.dart';
 import '../utils/user_color_generator.dart';
 import '../utils/platform_storage.dart';
@@ -32,6 +36,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   final SquareSelectionService _selectionService = SquareSelectionService();
   final BoardNumbersService _boardNumbersService = BoardNumbersService();
   final GameConfigService _configService = GameConfigService();
+  final VersionService _versionService = VersionService();
   List<int> awayTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
   List<int> homeTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
   BoardNumbersModel? _currentBoardNumbers;
@@ -51,11 +56,15 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   // Quarter scores for highlighting winners
   List<GameScoreModel> _quarterScores = [];
   
+  // Update available flag
+  bool _updateAvailable = false;
+
   // Stream subscriptions for real-time updates
   StreamSubscription<List<SquareSelectionModel>>? _selectionsSubscription;
   StreamSubscription<List<GameScoreModel>>? _scoresSubscription;
   StreamSubscription<BoardNumbersModel?>? _boardNumbersSubscription;
   StreamSubscription<GameConfigModel>? _configSubscription;
+  StreamSubscription<bool>? _versionSubscription;
   
   @override
   void initState() {
@@ -144,6 +153,20 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
         print('Error in config stream: $error');
       },
     );
+
+    // Listen to version stream for update notifications
+    _versionSubscription = _versionService.versionStream().listen(
+      (updateAvailable) {
+        if (mounted && updateAvailable != _updateAvailable) {
+          setState(() {
+            _updateAvailable = updateAvailable;
+          });
+        }
+      },
+      onError: (error) {
+        print('Error in version stream: $error');
+      },
+    );
   }
   
   
@@ -155,7 +178,8 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     _scoresSubscription?.cancel();
     _boardNumbersSubscription?.cancel();
     _configSubscription?.cancel();
-    
+    _versionSubscription?.cancel();
+
     _tabController.dispose();
     super.dispose();
   }
@@ -322,6 +346,316 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     final selectedSquares = _getQuarterMap(quarter);
     final count = selectedSquares.values.where((v) => v.userName == userName).length;
     return count > 1;
+  }
+
+  /// Check if device is mobile (narrow screen)
+  bool _isMobileDevice(BuildContext context) {
+    return MediaQuery.of(context).size.width < 600;
+  }
+
+  /// Reload the page (web only)
+  void _reloadPage() {
+    if (kIsWeb) {
+      reloadWebPage();
+    }
+  }
+
+  /// Show zoomed quadrant dialog for mobile users
+  void _showQuadrantZoom(int quarter, int quadrant, Map<String, SquareSelectionModel> selectedSquares) {
+    // Quadrant: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
+    final startRow = (quadrant >= 2) ? 5 : 0;
+    final startCol = (quadrant % 2 == 1) ? 5 : 0;
+
+    final quadrantNames = ['Top-Left', 'Top-Right', 'Bottom-Left', 'Bottom-Right'];
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.95,
+            maxHeight: MediaQuery.of(context).size.height * 0.8,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.inversePrimary,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Q$quarter - ${quadrantNames[quadrant]}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+              // Zoomed grid
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: AspectRatio(
+                    aspectRatio: 1.0,
+                    child: _buildZoomedQuadrant(quarter, startRow, startCol, selectedSquares),
+                  ),
+                ),
+              ),
+              // Tap to dismiss hint
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  'Tap outside or X to close',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build a zoomed 5x5 quadrant view
+  Widget _buildZoomedQuadrant(int quarter, int startRow, int startCol, Map<String, SquareSelectionModel> selectedSquares) {
+    // Get NFL team colors
+    final homeColors = NFLTeamColors.getTeamColors(_homeTeamName);
+    final awayColors = NFLTeamColors.getTeamColors(_awayTeamName);
+    final homePrimary = homeColors?.primary ?? Colors.red.shade700;
+    final awayPrimary = awayColors?.primary ?? Colors.blue.shade700;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gridSize = constraints.maxWidth;
+        final cellSize = gridSize / 6; // 5 cells + 1 for labels
+
+        return Column(
+          children: [
+            // Away team numbers header
+            Row(
+              children: [
+                SizedBox(width: cellSize * 0.6, height: cellSize * 0.6), // Corner spacer - matches home team column width
+                for (int col = startCol; col < startCol + 5; col++)
+                  Container(
+                    width: cellSize,
+                    height: cellSize * 0.6,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: awayPrimary.withValues(alpha: 0.2),
+                      border: Border.all(color: Colors.black),
+                    ),
+                    child: Text(
+                      _currentBoardNumbers != null ? '${awayTeamNumbers[col]}' : '',
+                      style: GoogleFonts.rubik(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: awayPrimary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            // Grid rows with home team numbers
+            for (int row = startRow; row < startRow + 5; row++)
+              Row(
+                children: [
+                  // Home team number
+                  Container(
+                    width: cellSize * 0.6,
+                    height: cellSize,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: homePrimary.withValues(alpha: 0.2),
+                      border: Border.all(color: Colors.black),
+                    ),
+                    child: Text(
+                      _currentBoardNumbers != null ? '${homeTeamNumbers[row]}' : '',
+                      style: GoogleFonts.rubik(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: homePrimary,
+                      ),
+                    ),
+                  ),
+                  // Cells
+                  for (int col = startCol; col < startCol + 5; col++)
+                    _buildZoomedCell(row, col, quarter, selectedSquares, cellSize),
+                ],
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Build a single zoomed cell
+  Widget _buildZoomedCell(int row, int col, int quarter, Map<String, SquareSelectionModel> selectedSquares, double cellSize) {
+    final key = '$row-$col';
+    final isSelected = selectedSquares.containsKey(key);
+    final squareType = _getSquareType(row, col, quarter);
+    final selection = selectedSquares[key];
+    final squareOwnerName = selection?.userName;
+    final entryNumber = selection?.entryNumber ?? 1;
+
+    // Determine the color based on square type and user
+    Color backgroundColor;
+    Color borderColor = Colors.black;
+    double borderWidth = 1.0;
+
+    if (squareType == 'reverse_bonus') {
+      backgroundColor = isSelected ? const Color(0xFFFFD700) : const Color(0xFFFFE55C);
+      borderColor = const Color(0xFFB8860B);
+      borderWidth = 3.0;
+    } else if (squareType == 'winner') {
+      backgroundColor = isSelected ? Colors.green.shade500 : Colors.green.shade300;
+      borderColor = Colors.green.shade800;
+      borderWidth = 2.0;
+    } else if (squareType == 'adjacent') {
+      backgroundColor = isSelected ? Colors.blue.shade400 : Colors.blue.shade200;
+      borderColor = Colors.blue.shade700;
+      borderWidth = 1.5;
+    } else if (squareType == 'diagonal') {
+      backgroundColor = isSelected ? Colors.red.shade400 : Colors.red.shade200;
+      borderColor = Colors.red.shade700;
+      borderWidth = 1.0;
+    } else {
+      if (isSelected && squareOwnerName != null) {
+        backgroundColor = UserColorGenerator.getColorForUser(squareOwnerName);
+        borderColor = UserColorGenerator.getDarkColorForUser(squareOwnerName);
+        final currentUserName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
+        if (squareOwnerName == currentUserName) {
+          backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwnerName);
+          borderWidth = 1.5;
+        }
+      } else {
+        backgroundColor = Colors.white;
+      }
+    }
+
+    const circledNumbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).pop(); // Close dialog
+        _onSquareTapped(row, col, quarter); // Handle tap
+      },
+      child: Container(
+        width: cellSize,
+        height: cellSize,
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          border: Border.all(color: borderColor, width: borderWidth),
+        ),
+        child: Stack(
+          children: [
+            // Prize badge
+            if (squareType != 'normal')
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: squareType == 'reverse_bonus'
+                        ? const Color(0xFFB8860B)
+                        : squareType == 'winner'
+                            ? Colors.green.shade800
+                            : squareType == 'adjacent'
+                                ? Colors.blue.shade700
+                                : Colors.red.shade700,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    squareType == 'reverse_bonus'
+                        ? '\$200'
+                        : squareType == 'winner'
+                            ? '\$2400'
+                            : squareType == 'adjacent'
+                                ? '\$150'
+                                : '\$100',
+                    style: GoogleFonts.rubik(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            // Entry number badge
+            if (isSelected && selection != null && _userHasMultipleEntriesInQuarter(quarter, squareOwnerName))
+              Positioned(
+                bottom: 2,
+                left: 2,
+                child: Text(
+                  entryNumber <= 10 ? circledNumbers[entryNumber - 1] : '$entryNumber',
+                  style: TextStyle(
+                    fontSize: cellSize * 0.2,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        blurRadius: 2,
+                        offset: const Offset(0.5, 0.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            // Owner name
+            Center(
+              child: isSelected && squareOwnerName != null
+                  ? Padding(
+                      padding: const EdgeInsets.all(2),
+                      child: Text(
+                        squareOwnerName,
+                        style: TextStyle(
+                          fontSize: cellSize * 0.18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.6),
+                              blurRadius: 2,
+                              offset: const Offset(1, 1),
+                            ),
+                          ],
+                        ),
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                    )
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
   }
   
   String _getSquareType(int row, int col, int quarter) {
@@ -773,10 +1107,47 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
       ),
       body: Column(
         children: [
+          // Update available banner
+          if (_updateAvailable)
+            Material(
+              color: Colors.blue.shade700,
+              child: InkWell(
+                onTap: () {
+                  // Reload the page to get the update
+                  if (kIsWeb) {
+                    // ignore: avoid_web_libraries_in_flutter
+                    // Use JavaScript interop for web reload
+                    _reloadPage();
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.system_update, color: Colors.white, size: 20),
+                      const SizedBox(width: 8),
+                      const Flexible(
+                        child: Text(
+                          'Update available! Tap to refresh',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.refresh, color: Colors.white, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           // User info header - moved from AppBar to prevent overflow
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            color: Theme.of(context).colorScheme.inversePrimary.withOpacity(0.1),
+            color: Theme.of(context).colorScheme.inversePrimary.withValues(alpha: 0.1),
             child: Row(
               children: [
                 Expanded(
@@ -841,9 +1212,9 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
         child: CircularProgressIndicator(),
       );
     }
-    
+
     final selectedSquares = _getQuarterMap(quarter);
-    
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -852,68 +1223,70 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
               child: widget.user.hasPaid
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '${_getUserQuarterSelectionCount(quarter)} of ${widget.user.numEntries} square${widget.user.numEntries != 1 ? 's' : ''} selected',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                        ),
-                        if (_currentBoardNumbers != null) ...[
-                          const SizedBox(width: 12),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade100,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.red.shade300),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.lock, size: 14, color: Colors.red.shade700),
-                                const SizedBox(width: 4),
                                 Text(
-                                  'LOCKED',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.red.shade700,
-                                  ),
+                                  '${_getUserQuarterSelectionCount(quarter)} of ${widget.user.numEntries} square${widget.user.numEntries != 1 ? 's' : ''} selected',
+                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                                 ),
+                                if (_currentBoardNumbers != null) ...[
+                                  const SizedBox(width: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.shade100,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: Colors.red.shade300),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.lock, size: 14, color: Colors.red.shade700),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'LOCKED',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.red.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ],
+                            )
+                          : Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade100,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.orange.shade300),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.lock, color: Colors.orange.shade700, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Payment required to select squares',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
-                      ],
-                    )
-                  : Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.orange.shade300),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.lock, color: Colors.orange.shade700, size: 18),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Payment required to select squares',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.orange.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
             ),
             Expanded(
-              child: AspectRatio(
-                aspectRatio: 1.0,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12.0),
+                child: AspectRatio(
+                  aspectRatio: 1.0,
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final double gridSize = constraints.maxWidth;
@@ -928,10 +1301,11 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                     final awayLight = awayColors?.primary.withValues(alpha: 0.3) ?? Colors.blue.shade100;
 
                     return Stack(
+                      clipBehavior: Clip.none,
                       children: [
                         // Away team label (top, spread horizontally)
                         Positioned(
-                          top: cellSize * 0.15,
+                          top: cellSize * 0.05,
                           left: cellSize,
                           child: SizedBox(
                             width: cellSize * 10,
@@ -957,17 +1331,17 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                         ),
 
                         Positioned(
-                          top: cellSize * 0.6,
+                          top: cellSize * 0.4,
                           left: cellSize,
                           child: SizedBox(
                             width: cellSize * 10,
-                            height: cellSize * 0.4,
+                            height: cellSize * 0.6,
                             child: Row(
                               children: [
                                 for (int i = 0; i < 10; i++)
                                   Container(
                                     width: cellSize,
-                                    height: cellSize * 0.4,
+                                    height: cellSize * 0.6,
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
                                       color: awayLight,
@@ -1017,15 +1391,15 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
 
                         Positioned(
                           top: cellSize,
-                          left: cellSize * 0.6,
+                          left: cellSize * 0.5,
                           child: SizedBox(
-                            width: cellSize * 0.4,
+                            width: cellSize * 0.5,
                             height: cellSize * 10,
                             child: Column(
                               children: [
                                 for (int i = 0; i < 10; i++)
                                   Container(
-                                    width: cellSize * 0.4,
+                                    width: cellSize * 0.5,
                                     height: cellSize,
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
@@ -1047,11 +1421,11 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                         ),
                         
                         Positioned(
-                          top: cellSize * 0.6,
-                          left: cellSize * 0.6,
+                          top: cellSize * 0.4,
+                          left: cellSize * 0.5,
                           child: Container(
-                            width: cellSize * 0.4,
-                            height: cellSize * 0.4,
+                            width: cellSize * 0.5,
+                            height: cellSize * 0.6,
                             decoration: BoxDecoration(
                               color: Colors.grey.shade300,
                               border: Border.all(color: Colors.black),
@@ -1063,7 +1437,24 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                         Positioned(
                           top: cellSize,
                           left: cellSize,
-                          child: SizedBox(
+                          child: GestureDetector(
+                            onLongPressStart: _isMobileDevice(context) ? (details) {
+                              // Determine which quadrant was long-pressed
+                              final localX = details.localPosition.dx;
+                              final localY = details.localPosition.dy;
+                              final gridWidth = cellSize * 10;
+                              final gridHeight = cellSize * 10;
+
+                              int quadrant;
+                              if (localY < gridHeight / 2) {
+                                quadrant = localX < gridWidth / 2 ? 0 : 1; // Top-left or top-right
+                              } else {
+                                quadrant = localX < gridWidth / 2 ? 2 : 3; // Bottom-left or bottom-right
+                              }
+
+                              _showQuadrantZoom(quarter, quadrant, selectedSquares);
+                            } : null,
+                            child: SizedBox(
                             width: cellSize * 10,
                             height: cellSize * 10,
                             child: GridView.builder(
@@ -1126,7 +1517,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                 // Circled number characters for entry badge
                                 const circledNumbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
 
-                                return GestureDetector(
+                                final cell = GestureDetector(
                                   onTap: () => _onSquareTapped(row, col, quarter),
                                   child: Opacity(
                                     opacity: widget.user.hasPaid ? 1.0 : 0.7,
@@ -1186,7 +1577,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                                 color: Colors.white,
                                                 shadows: [
                                                   Shadow(
-                                                    color: Colors.black.withOpacity(0.7),
+                                                    color: Colors.black.withValues(alpha: 0.7),
                                                     blurRadius: 2,
                                                     offset: const Offset(0.5, 0.5),
                                                   ),
@@ -1205,7 +1596,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                                   color: Colors.white,
                                                   shadows: [
                                                     Shadow(
-                                                      color: Colors.black.withOpacity(0.5),
+                                                      color: Colors.black.withValues(alpha: 0.5),
                                                       blurRadius: 2,
                                                       offset: const Offset(1, 1),
                                                     ),
@@ -1222,14 +1613,26 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                     ),
                                   ),
                                 );
+
+                                // Only show tooltip on desktop (not mobile) to avoid interfering with long-press
+                                if (!_isMobileDevice(context) && squareOwnerName != null) {
+                                  return Tooltip(
+                                    message: squareOwnerName,
+                                    waitDuration: const Duration(milliseconds: 500),
+                                    child: cell,
+                                  );
+                                }
+                                return cell;
                               },
                             ),
+                          ),
                           ),
                         ),
                       ],
                     );
                   },
                 ),
+              ),
               ),
             ),
           ],
