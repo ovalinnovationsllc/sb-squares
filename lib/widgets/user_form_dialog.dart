@@ -40,8 +40,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
       _isAdmin = widget.user!.isAdmin;
       _hasPaid = widget.user!.hasPaid;
     } else {
-      // Default values for new user
-      _numEntriesController.text = '0';
+      // Default values for new user - leave numEntries empty to require input
     }
   }
 
@@ -169,7 +168,7 @@ class _UserFormDialogState extends State<UserFormDialog> {
                 TextFormField(
                   controller: _numEntriesController,
                   decoration: const InputDecoration(
-                    labelText: 'Number of Entries',
+                    labelText: 'Number of Entries *',
                     prefixIcon: Icon(Icons.sports_football),
                   ),
                   keyboardType: TextInputType.number,
@@ -178,8 +177,8 @@ class _UserFormDialogState extends State<UserFormDialog> {
                       return 'Number of entries is required';
                     }
                     final num = int.tryParse(value.trim());
-                    if (num == null || num < 0) {
-                      return 'Enter a valid number (0 or greater)';
+                    if (num == null || num <= 0) {
+                      return 'Enter a valid number (1 or greater)';
                     }
                     if (num > SecurityConfig.maxEntriesPerUser) {
                       return 'Maximum ${SecurityConfig.maxEntriesPerUser} entries allowed';

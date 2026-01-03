@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../utils/web_reload_stub.dart'
@@ -100,6 +101,11 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     });
     // Update Firestore to mark coach marks as seen
     await _userService.markCoachMarksSeen(widget.user.id);
+
+    // Also update local storage so it persists across sessions
+    final updatedUser = widget.user.copyWith(hasSeenCoachMarks: true);
+    final userJson = jsonEncode(updatedUser.toJson());
+    await PlatformStorage.setString('sb_squares_user', userJson);
   }
   
   void _setupStreamListeners() {
@@ -211,7 +217,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     super.dispose();
   }
 
-  void _onSquareTapped(int row, int col, int quarter) async {
+  Future<void> _onSquareTapped(int row, int col, int quarter) async {
     if (_isLoadingSelections) return; // Prevent taps while loading
 
     // Check if board is locked (numbers have been randomized)
@@ -398,69 +404,71 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.95,
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.inversePrimary,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Q$quarter - ${quadrantNames[quadrant]}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
-              ),
-              // Zoomed grid
-              Flexible(
-                child: Padding(
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.95,
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
                   padding: const EdgeInsets.all(12),
-                  child: AspectRatio(
-                    aspectRatio: 1.0,
-                    child: _buildZoomedQuadrant(quarter, startRow, startCol, selectedSquares),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.inversePrimary,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Q$quarter - ${quadrantNames[quadrant]}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              // Tap to dismiss hint
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Tap outside or X to close',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
+                // Zoomed grid
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: AspectRatio(
+                      aspectRatio: 1.0,
+                      child: _buildZoomedQuadrant(quarter, startRow, startCol, selectedSquares, setDialogState),
+                    ),
                   ),
                 ),
-              ),
-            ],
+                // Tap to dismiss hint
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Tap outside or X to close',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -468,7 +476,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   }
 
   /// Build a zoomed 5x5 quadrant view
-  Widget _buildZoomedQuadrant(int quarter, int startRow, int startCol, Map<String, SquareSelectionModel> selectedSquares) {
+  Widget _buildZoomedQuadrant(int quarter, int startRow, int startCol, Map<String, SquareSelectionModel> selectedSquares, StateSetter setDialogState) {
     // Get NFL team colors
     final homeColors = NFLTeamColors.getTeamColors(_homeTeamName);
     final awayColors = NFLTeamColors.getTeamColors(_awayTeamName);
@@ -530,7 +538,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                   ),
                   // Cells
                   for (int col = startCol; col < startCol + 5; col++)
-                    _buildZoomedCell(row, col, quarter, selectedSquares, cellSize),
+                    _buildZoomedCell(row, col, quarter, selectedSquares, cellSize, setDialogState),
                 ],
               ),
           ],
@@ -540,7 +548,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   }
 
   /// Build a single zoomed cell
-  Widget _buildZoomedCell(int row, int col, int quarter, Map<String, SquareSelectionModel> selectedSquares, double cellSize) {
+  Widget _buildZoomedCell(int row, int col, int quarter, Map<String, SquareSelectionModel> selectedSquares, double cellSize, StateSetter setDialogState) {
     final key = '$row-$col';
     final isSelected = selectedSquares.containsKey(key);
     final squareType = _getSquareType(row, col, quarter);
@@ -586,9 +594,13 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     const circledNumbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
 
     return GestureDetector(
-      onTap: () {
-        Navigator.of(context).pop(); // Close dialog
-        _onSquareTapped(row, col, quarter); // Handle tap
+      onTap: () async {
+        // Handle tap without closing the dialog
+        await _onSquareTapped(row, col, quarter);
+        // Wait for Firestore stream to update the map
+        await Future.delayed(const Duration(milliseconds: 300));
+        // Rebuild dialog to show updated state
+        setDialogState(() {});
       },
       child: Container(
         width: cellSize,
