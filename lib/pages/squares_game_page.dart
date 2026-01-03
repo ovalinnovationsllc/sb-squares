@@ -14,12 +14,13 @@ import '../services/square_selection_service.dart';
 import '../services/board_numbers_service.dart';
 import '../services/game_config_service.dart';
 import '../services/version_service.dart';
+import '../services/user_service.dart';
 import '../widgets/footer_widget.dart';
+import '../widgets/coach_mark_overlay.dart';
 import '../utils/user_color_generator.dart';
 import '../utils/platform_storage.dart';
 import '../utils/nfl_team_colors.dart';
 import '../main.dart';
-import 'admin_dashboard.dart';
 
 class SquaresGamePage extends StatefulWidget {
   final UserModel user;
@@ -37,6 +38,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   final BoardNumbersService _boardNumbersService = BoardNumbersService();
   final GameConfigService _configService = GameConfigService();
   final VersionService _versionService = VersionService();
+  final UserService _userService = UserService();
   List<int> awayTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
   List<int> homeTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
   BoardNumbersModel? _currentBoardNumbers;
@@ -59,6 +61,9 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   // Update available flag
   bool _updateAvailable = false;
 
+  // Coach marks overlay
+  bool _showCoachMarks = false;
+
   // Stream subscriptions for real-time updates
   StreamSubscription<List<SquareSelectionModel>>? _selectionsSubscription;
   StreamSubscription<List<GameScoreModel>>? _scoresSubscription;
@@ -70,9 +75,31 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    
+
     // Set up real-time stream subscriptions
     _setupStreamListeners();
+
+    // Show coach marks for mobile users who haven't seen them
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkShowCoachMarks();
+    });
+  }
+
+  void _checkShowCoachMarks() {
+    // Only show on mobile devices and if user hasn't seen them
+    if (_isMobileDevice(context) && !widget.user.hasSeenCoachMarks) {
+      setState(() {
+        _showCoachMarks = true;
+      });
+    }
+  }
+
+  void _dismissCoachMarks() async {
+    setState(() {
+      _showCoachMarks = false;
+    });
+    // Update Firestore to mark coach marks as seen
+    await _userService.markCoachMarksSeen(widget.user.id);
   }
   
   void _setupStreamListeners() {
@@ -1042,7 +1069,9 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Stack(
+      children: [
+        Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
@@ -1203,9 +1232,15 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
           const FooterWidget(),
         ],
       ),
+    ),
+    if (_showCoachMarks)
+      CoachMarkOverlay(
+        onDismiss: _dismissCoachMarks,
+      ),
+    ],
     );
   }
-  
+
   Widget _buildQuarterGrid(int quarter) {
     if (_isLoadingSelections) {
       return const Center(

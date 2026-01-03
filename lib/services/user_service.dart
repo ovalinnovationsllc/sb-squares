@@ -189,6 +189,19 @@ class UserService {
     }
   }
 
+  Future<bool> markCoachMarksSeen(String userId) async {
+    try {
+      await _firestore
+          .collection(_collection)
+          .doc(userId)
+          .update({'hasSeenCoachMarks': true});
+      return true;
+    } catch (e) {
+      print('Error marking coach marks as seen: $e');
+      return false;
+    }
+  }
+
   Future<bool> clearAllUsers() async {
     try {
       final batch = _firestore.batch();

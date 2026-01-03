@@ -8,6 +8,7 @@ class UserModel {
   final DateTime? createdAt;
   final bool hasSeenInstructions;
   final bool emailVerified;
+  final bool hasSeenCoachMarks;
 
   UserModel({
     required this.id,
@@ -19,6 +20,7 @@ class UserModel {
     this.createdAt,
     this.hasSeenInstructions = false,
     this.emailVerified = false,
+    this.hasSeenCoachMarks = false,
   });
 
   UserModel copyWith({
@@ -31,6 +33,7 @@ class UserModel {
     DateTime? createdAt,
     bool? hasSeenInstructions,
     bool? emailVerified,
+    bool? hasSeenCoachMarks,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -42,6 +45,7 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
       hasSeenInstructions: hasSeenInstructions ?? this.hasSeenInstructions,
       emailVerified: emailVerified ?? this.emailVerified,
+      hasSeenCoachMarks: hasSeenCoachMarks ?? this.hasSeenCoachMarks,
     );
   }
 
@@ -56,6 +60,7 @@ class UserModel {
       'createdAt': createdAt?.toIso8601String(),
       'hasSeenInstructions': hasSeenInstructions,
       'emailVerified': emailVerified,
+      'hasSeenCoachMarks': hasSeenCoachMarks,
     };
   }
 
@@ -72,6 +77,7 @@ class UserModel {
           : null,
       hasSeenInstructions: json['hasSeenInstructions'] as bool? ?? false,
       emailVerified: json['emailVerified'] as bool? ?? false,
+      hasSeenCoachMarks: json['hasSeenCoachMarks'] as bool? ?? false,
     );
   }
   
@@ -88,6 +94,7 @@ class UserModel {
           : null,
       hasSeenInstructions: data['hasSeenInstructions'] as bool? ?? false,
       emailVerified: data['emailVerified'] as bool? ?? false,
+      hasSeenCoachMarks: data['hasSeenCoachMarks'] as bool? ?? false,
     );
   }
   
@@ -101,6 +108,7 @@ class UserModel {
       'createdAt': createdAt,
       'hasSeenInstructions': hasSeenInstructions,
       'emailVerified': emailVerified,
+      'hasSeenCoachMarks': hasSeenCoachMarks,
     };
   }
 
@@ -121,7 +129,8 @@ class UserModel {
         other.isAdmin == isAdmin &&
         other.hasPaid == hasPaid &&
         other.createdAt == createdAt &&
-        other.hasSeenInstructions == hasSeenInstructions;
+        other.hasSeenInstructions == hasSeenInstructions &&
+        other.hasSeenCoachMarks == hasSeenCoachMarks;
   }
 
   @override
@@ -133,6 +142,7 @@ class UserModel {
         isAdmin.hashCode ^
         hasPaid.hashCode ^
         createdAt.hashCode ^
-        hasSeenInstructions.hashCode;
+        hasSeenInstructions.hashCode ^
+        hasSeenCoachMarks.hashCode;
   }
 }
