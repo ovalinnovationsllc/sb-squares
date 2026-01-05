@@ -556,39 +556,50 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     final squareOwnerName = selection?.userName;
     final entryNumber = selection?.entryNumber ?? 1;
 
-    // Determine the color based on square type and user
+    // Determine the color based on user (same as main grid)
     Color backgroundColor;
     Color borderColor = Colors.black;
     double borderWidth = 1.0;
 
-    if (squareType == 'reverse_bonus') {
-      backgroundColor = isSelected ? const Color(0xFFFFD700) : const Color(0xFFFFE55C);
-      borderColor = const Color(0xFFB8860B);
-      borderWidth = 3.0;
-    } else if (squareType == 'winner') {
-      backgroundColor = isSelected ? Colors.green.shade500 : Colors.green.shade300;
-      borderColor = Colors.green.shade800;
-      borderWidth = 2.0;
-    } else if (squareType == 'adjacent') {
-      backgroundColor = isSelected ? Colors.blue.shade400 : Colors.blue.shade200;
-      borderColor = Colors.blue.shade700;
-      borderWidth = 1.5;
-    } else if (squareType == 'diagonal') {
-      backgroundColor = isSelected ? Colors.red.shade400 : Colors.red.shade200;
-      borderColor = Colors.red.shade700;
-      borderWidth = 1.0;
-    } else {
-      if (isSelected && squareOwnerName != null) {
-        backgroundColor = UserColorGenerator.getColorForUser(squareOwnerName);
-        borderColor = UserColorGenerator.getDarkColorForUser(squareOwnerName);
-        final currentUserName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
-        if (squareOwnerName == currentUserName) {
-          backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwnerName);
-          borderWidth = 1.5;
-        }
-      } else {
-        backgroundColor = Colors.white;
+    if (isSelected && squareOwnerName != null) {
+      backgroundColor = UserColorGenerator.getColorForUser(squareOwnerName);
+      borderColor = UserColorGenerator.getDarkColorForUser(squareOwnerName);
+      final currentUserName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
+      if (squareOwnerName == currentUserName) {
+        backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwnerName);
       }
+    } else {
+      backgroundColor = Colors.white;
+    }
+
+    // Calculate total prize - check each prize independently
+    int prizeMoney = 0;
+
+    // Check main winner and adjacent/diagonal prizes
+    final winnerPos = _getWinnerPosition(quarter);
+    if (winnerPos != null) {
+      int dRow = row - winnerPos.row;
+      int dCol = col - winnerPos.col;
+      if (dRow > 5) dRow -= 10;
+      if (dRow < -5) dRow += 10;
+      if (dCol > 5) dCol -= 10;
+      if (dCol < -5) dCol += 10;
+
+      if (dRow == 0 && dCol == 0) {
+        prizeMoney += 2400; // Main winner
+      } else if (dRow.abs() <= 1 && dCol.abs() <= 1) {
+        if (dRow == 0 || dCol == 0) {
+          prizeMoney += 150; // Adjacent
+        } else {
+          prizeMoney += 100; // Diagonal
+        }
+      }
+    }
+
+    // Check bonus winner (Q2 and Q4 only) - adds to any existing prize
+    final bonusPos = _getReverseBonusPosition(quarter);
+    if (bonusPos != null && row == bonusPos.row && col == bonusPos.col) {
+      prizeMoney += 200;
     }
 
     const circledNumbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
@@ -612,30 +623,18 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
         child: Stack(
           children: [
             // Prize badge
-            if (squareType != 'normal')
+            if (prizeMoney > 0)
               Positioned(
                 top: 4,
                 right: 4,
                 child: Container(
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
-                    color: squareType == 'reverse_bonus'
-                        ? const Color(0xFFB8860B)
-                        : squareType == 'winner'
-                            ? Colors.green.shade800
-                            : squareType == 'adjacent'
-                                ? Colors.blue.shade700
-                                : Colors.red.shade700,
+                    color: Colors.black,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    squareType == 'reverse_bonus'
-                        ? '\$200'
-                        : squareType == 'winner'
-                            ? '\$2400'
-                            : squareType == 'adjacent'
-                                ? '\$150'
-                                : '\$100',
+                    '\$$prizeMoney',
                     style: GoogleFonts.rubik(
                       color: Colors.white,
                       fontSize: 10,
@@ -697,6 +696,142 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     );
   }
   
+  /// Get the winner position (row, col) for a quarter, returns null if no winner yet
+  ({int row, int col})? _getWinnerPosition(int quarter) {
+    final score = _quarterScores.firstWhere(
+      (s) => s.quarter == quarter,
+      orElse: () => GameScoreModel(id: '', quarter: quarter, homeScore: 0, awayScore: 0),
+    );
+
+    if (score.id.isEmpty || _currentBoardNumbers == null) return null;
+
+    final homeScoreDigit = score.homeLastDigit;
+    final awayScoreDigit = score.awayLastDigit;
+
+    int? homeRow, awayCol;
+    for (int i = 0; i < homeTeamNumbers.length; i++) {
+      if (homeTeamNumbers[i] == homeScoreDigit) {
+        homeRow = i;
+        break;
+      }
+    }
+    for (int i = 0; i < awayTeamNumbers.length; i++) {
+      if (awayTeamNumbers[i] == awayScoreDigit) {
+        awayCol = i;
+        break;
+      }
+    }
+
+    if (homeRow != null && awayCol != null) {
+      return (row: homeRow, col: awayCol);
+    }
+    return null;
+  }
+
+  /// Get the reverse +5 bonus winner position for Q2 and Q4
+  ({int row, int col})? _getReverseBonusPosition(int quarter) {
+    if (quarter != 2 && quarter != 4) return null;
+
+    final score = _quarterScores.firstWhere(
+      (s) => s.quarter == quarter,
+      orElse: () => GameScoreModel(id: '', quarter: quarter, homeScore: 0, awayScore: 0),
+    );
+
+    if (score.id.isEmpty || _currentBoardNumbers == null) return null;
+
+    final reversedHomeDigit = (score.awayScore + 5) % 10;
+    final reversedAwayDigit = (score.homeScore + 5) % 10;
+
+    int? bonusHomeRow, bonusAwayCol;
+    for (int i = 0; i < homeTeamNumbers.length; i++) {
+      if (homeTeamNumbers[i] == reversedHomeDigit) {
+        bonusHomeRow = i;
+        break;
+      }
+    }
+    for (int i = 0; i < awayTeamNumbers.length; i++) {
+      if (awayTeamNumbers[i] == reversedAwayDigit) {
+        bonusAwayCol = i;
+        break;
+      }
+    }
+
+    if (bonusHomeRow != null && bonusAwayCol != null) {
+      return (row: bonusHomeRow, col: bonusAwayCol);
+    }
+    return null;
+  }
+
+  /// Get the border for a cell that is part of a winning 3x3 area
+  /// Returns thick borders only on the outer edges of the 3x3 area
+  /// Note: Only the main winner gets a 3x3 border, bonus winner gets outlined if outside the 3x3
+  Border? _getWinningAreaBorder(int row, int col, int quarter, Color borderColor) {
+    final winnerPos = _getWinnerPosition(quarter);
+    final mainBorder = _getBorderForWinnerArea(row, col, winnerPos, borderColor);
+
+    // Check if this is a reverse bonus winner that's outside the main 3x3 area
+    final bonusPos = _getReverseBonusPosition(quarter);
+    if (bonusPos != null && row == bonusPos.row && col == bonusPos.col) {
+      // Check if bonus is inside the main 3x3 area
+      if (winnerPos != null) {
+        int dRow = bonusPos.row - winnerPos.row;
+        int dCol = bonusPos.col - winnerPos.col;
+        if (dRow > 5) dRow -= 10;
+        if (dRow < -5) dRow += 10;
+        if (dCol > 5) dCol -= 10;
+        if (dCol < -5) dCol += 10;
+
+        // If bonus is outside the 3x3 area, give it a full black border
+        if (dRow < -1 || dRow > 1 || dCol < -1 || dCol > 1) {
+          return Border.all(color: Colors.black, width: 3.0);
+        }
+      } else {
+        // No main winner yet but there's a bonus - give it a border
+        return Border.all(color: Colors.black, width: 3.0);
+      }
+    }
+
+    return mainBorder;
+  }
+
+  Border? _getBorderForWinnerArea(int row, int col, ({int row, int col})? winnerPos, Color borderColor) {
+    if (winnerPos == null) return null;
+
+    final winRow = winnerPos.row;
+    final winCol = winnerPos.col;
+
+    // Calculate position relative to winner (with wrap-around)
+    int dRow = row - winRow;
+    int dCol = col - winCol;
+
+    // Handle wrap-around: if distance is > 5, it's actually closer on the other side
+    if (dRow > 5) dRow -= 10;
+    if (dRow < -5) dRow += 10;
+    if (dCol > 5) dCol -= 10;
+    if (dCol < -5) dCol += 10;
+
+    // Check if this cell is within the 3x3 area (dRow and dCol both in -1, 0, 1)
+    if (dRow < -1 || dRow > 1 || dCol < -1 || dCol > 1) return null;
+
+    const thickWidth = 3.0;
+    const thinWidth = 0.5;
+    final thinBorder = BorderSide(color: Colors.black, width: thinWidth);
+    final thickBorder = BorderSide(color: borderColor, width: thickWidth);
+
+    // Determine which edges need thick borders (outer edges of 3x3)
+    final topThick = dRow == -1;
+    final bottomThick = dRow == 1;
+    final leftThick = dCol == -1;
+    final rightThick = dCol == 1;
+
+    return Border(
+      top: topThick ? thickBorder : thinBorder,
+      bottom: bottomThick ? thickBorder : thinBorder,
+      left: leftThick ? thickBorder : thinBorder,
+      right: rightThick ? thickBorder : thinBorder,
+    );
+  }
+
   String _getSquareType(int row, int col, int quarter) {
     // Find the score for this quarter
     final score = _quarterScores.firstWhere(
@@ -1526,83 +1661,81 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                 Color borderColor = Colors.black;
                                 double borderWidth = 0.5;
 
-                                if (squareType == 'reverse_bonus') {
-                                  // Gold for Reverse +5 bonus winners (Q2 and Q4)
-                                  backgroundColor = isSelected ? const Color(0xFFFFD700) : const Color(0xFFFFE55C);
-                                  borderColor = const Color(0xFFB8860B); // Dark goldenrod
-                                  borderWidth = 3.0;
-                                } else if (squareType == 'winner') {
-                                  backgroundColor = isSelected ? Colors.green.shade500 : Colors.green.shade300;
-                                  borderColor = Colors.green.shade800;
-                                  borderWidth = 2.0;
-                                } else if (squareType == 'adjacent') {
-                                  backgroundColor = isSelected ? Colors.blue.shade400 : Colors.blue.shade200;
-                                  borderColor = Colors.blue.shade700;
-                                  borderWidth = 1.5;
-                                } else if (squareType == 'diagonal') {
-                                  backgroundColor = isSelected ? Colors.red.shade400 : Colors.red.shade200;
-                                  borderColor = Colors.red.shade700;
-                                  borderWidth = 1.0;
-                                } else {
-                                  // Use user-specific colors for normal squares
-                                  if (isSelected && squareOwnerName != null) {
-                                    // Generate a unique color for each user based on their name
-                                    backgroundColor = UserColorGenerator.getColorForUser(squareOwnerName);
-                                    borderColor = UserColorGenerator.getDarkColorForUser(squareOwnerName);
+                                // Use user-specific colors for all squares (including winners)
+                                if (isSelected && squareOwnerName != null) {
+                                  // Generate a unique color for each user based on their name
+                                  backgroundColor = UserColorGenerator.getColorForUser(squareOwnerName);
+                                  borderColor = UserColorGenerator.getDarkColorForUser(squareOwnerName);
 
-                                    // If it's the current user's square, make it slightly different
-                                    final currentUserName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
-                                    if (squareOwnerName == currentUserName) {
-                                      backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwnerName);
-                                      borderWidth = 1.0;
-                                    }
-                                  } else {
-                                    backgroundColor = Colors.white;
+                                  // If it's the current user's square, make it slightly different
+                                  final currentUserName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
+                                  if (squareOwnerName == currentUserName) {
+                                    backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwnerName);
                                   }
+                                } else {
+                                  backgroundColor = Colors.white;
+                                }
+
+                                // Get special border for winning 3x3 area
+                                final winningBorder = _getWinningAreaBorder(row, col, quarter, Colors.black);
+
+                                // Calculate total prize - check each prize independently
+                                int prizeMoney = 0;
+
+                                // Check main winner and adjacent/diagonal prizes
+                                final winnerPos = _getWinnerPosition(quarter);
+                                if (winnerPos != null) {
+                                  int dRow = row - winnerPos.row;
+                                  int dCol = col - winnerPos.col;
+                                  if (dRow > 5) dRow -= 10;
+                                  if (dRow < -5) dRow += 10;
+                                  if (dCol > 5) dCol -= 10;
+                                  if (dCol < -5) dCol += 10;
+
+                                  if (dRow == 0 && dCol == 0) {
+                                    prizeMoney += 2400; // Main winner
+                                  } else if (dRow.abs() <= 1 && dCol.abs() <= 1) {
+                                    if (dRow == 0 || dCol == 0) {
+                                      prizeMoney += 150; // Adjacent
+                                    } else {
+                                      prizeMoney += 100; // Diagonal
+                                    }
+                                  }
+                                }
+
+                                // Check bonus winner (Q2 and Q4 only) - adds to any existing prize
+                                final bonusPos = _getReverseBonusPosition(quarter);
+                                if (bonusPos != null && row == bonusPos.row && col == bonusPos.col) {
+                                  prizeMoney += 200;
                                 }
 
                                 // Circled number characters for entry badge
                                 const circledNumbers = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'];
 
-                                final cell = GestureDetector(
-                                  onTap: () => _onSquareTapped(row, col, quarter),
-                                  child: Opacity(
-                                    opacity: widget.user.hasPaid ? 1.0 : 0.7,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: backgroundColor,
-                                        border: Border.all(
-                                          color: borderColor,
-                                          width: borderWidth,
-                                        ),
-                                      ),
+                                final cellContent = Container(
+                                  decoration: BoxDecoration(
+                                    color: backgroundColor,
+                                    border: winningBorder ?? Border.all(
+                                      color: borderColor,
+                                      width: borderWidth,
+                                    ),
+                                  ),
                                     child: Stack(
+                                      clipBehavior: Clip.none,
                                       children: [
                                         // Prize badge for winning squares
-                                        if (squareType != 'normal')
+                                        if (prizeMoney > 0)
                                           Positioned(
                                             top: 2,
                                             right: 2,
                                             child: Container(
                                               padding: const EdgeInsets.all(2),
                                               decoration: BoxDecoration(
-                                                color: squareType == 'reverse_bonus'
-                                                  ? const Color(0xFFB8860B) // Dark goldenrod
-                                                  : squareType == 'winner'
-                                                    ? Colors.green.shade800
-                                                    : squareType == 'adjacent'
-                                                      ? Colors.blue.shade700
-                                                      : Colors.red.shade700,
+                                                color: Colors.black,
                                                 borderRadius: BorderRadius.circular(4),
                                               ),
                                               child: Text(
-                                                squareType == 'reverse_bonus'
-                                                  ? '\$200'
-                                                  : squareType == 'winner'
-                                                    ? '\$2400'
-                                                    : squareType == 'adjacent'
-                                                      ? '\$150'
-                                                      : '\$100',
+                                                '\$$prizeMoney',
                                                 style: GoogleFonts.rubik(
                                                   color: Colors.white,
                                                   fontSize: 8,
@@ -1657,7 +1790,13 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                         ),
                                       ],
                                     ),
-                                    ),
+                                );
+
+                                final cell = GestureDetector(
+                                  onTap: () => _onSquareTapped(row, col, quarter),
+                                  child: Opacity(
+                                    opacity: widget.user.hasPaid ? 1.0 : 0.7,
+                                    child: cellContent,
                                   ),
                                 );
 
