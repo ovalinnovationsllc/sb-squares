@@ -130,40 +130,52 @@ exports.sendWinnerNotifications = onCall(async (request) => {
       return { success: false, message: "Invalid board numbers configuration", emailsSent: 0 };
     }
 
-    // Calculate all winning positions (winner, adjacent, diagonal)
-    const winningPositions = [];
+    // Calculate all winning positions with combined prizes
+    // Use a map to combine prizes for squares that win multiple ways
+    const positionPrizes = {};
+
+    // Helper to add prize to a position
+    const addPrize = (row, col, type, prize) => {
+      const key = `${row}-${col}`;
+      if (!positionPrizes[key]) {
+        positionPrizes[key] = { row, col, types: [], prize: 0 };
+      }
+      positionPrizes[key].types.push(type);
+      positionPrizes[key].prize += prize;
+    };
 
     // Main winner ($2400)
-    winningPositions.push({ row: winningRow, col: winningCol, type: "winner", prize: 2400 });
+    addPrize(winningRow, winningCol, "winner", 2400);
 
     // Adjacent squares ($150 each) - with wrapping
-    winningPositions.push({ row: (winningRow + 1) % 10, col: winningCol, type: "adjacent", prize: 150 });
-    winningPositions.push({ row: (winningRow - 1 + 10) % 10, col: winningCol, type: "adjacent", prize: 150 });
-    winningPositions.push({ row: winningRow, col: (winningCol + 1) % 10, type: "adjacent", prize: 150 });
-    winningPositions.push({ row: winningRow, col: (winningCol - 1 + 10) % 10, type: "adjacent", prize: 150 });
+    addPrize((winningRow + 1) % 10, winningCol, "adjacent", 150);
+    addPrize((winningRow - 1 + 10) % 10, winningCol, "adjacent", 150);
+    addPrize(winningRow, (winningCol + 1) % 10, "adjacent", 150);
+    addPrize(winningRow, (winningCol - 1 + 10) % 10, "adjacent", 150);
 
     // Diagonal squares ($100 each) - with wrapping
-    winningPositions.push({ row: (winningRow + 1) % 10, col: (winningCol + 1) % 10, type: "diagonal", prize: 100 });
-    winningPositions.push({ row: (winningRow + 1) % 10, col: (winningCol - 1 + 10) % 10, type: "diagonal", prize: 100 });
-    winningPositions.push({ row: (winningRow - 1 + 10) % 10, col: (winningCol + 1) % 10, type: "diagonal", prize: 100 });
-    winningPositions.push({ row: (winningRow - 1 + 10) % 10, col: (winningCol - 1 + 10) % 10, type: "diagonal", prize: 100 });
+    addPrize((winningRow + 1) % 10, (winningCol + 1) % 10, "diagonal", 100);
+    addPrize((winningRow + 1) % 10, (winningCol - 1 + 10) % 10, "diagonal", 100);
+    addPrize((winningRow - 1 + 10) % 10, (winningCol + 1) % 10, "diagonal", 100);
+    addPrize((winningRow - 1 + 10) % 10, (winningCol - 1 + 10) % 10, "diagonal", 100);
 
     // Reverse + 5 bonus prize ($200) - only for Q2 (halftime) and Q4 (final)
     // Rule: 1) Swap home/away scores, 2) Add 5 to each, 3) Take last digits
-    // Example: Score 10-3 → Reverse to 3-10 → Add 5 → 8-15 → Last digits: 8 and 5
+    // This prize stacks with any other prize on the same square
     if (quarter === 2 || quarter === 4) {
-      const bonusHomeDigit = (awayScore + 5) % 10;  // Reversed: away becomes home, then add 5
-      const bonusAwayDigit = (homeScore + 5) % 10;  // Reversed: home becomes away, then add 5
+      const bonusHomeDigit = (awayScore + 5) % 10;
+      const bonusAwayDigit = (homeScore + 5) % 10;
 
       const bonusRow = homeNumbers.indexOf(bonusHomeDigit);
       const bonusCol = awayNumbers.indexOf(bonusAwayDigit);
 
-      // Only add if valid position and different from the main winner
-      if (bonusRow !== -1 && bonusCol !== -1 &&
-          (bonusRow !== winningRow || bonusCol !== winningCol)) {
-        winningPositions.push({ row: bonusRow, col: bonusCol, type: "reverse", prize: 200 });
+      if (bonusRow !== -1 && bonusCol !== -1) {
+        addPrize(bonusRow, bonusCol, "reverse", 200);
       }
     }
+
+    // Convert to array
+    const winningPositions = Object.values(positionPrizes);
 
     // Get all selections for this quarter
     const selectionsSnapshot = await db.collection("square_selections")
@@ -183,8 +195,22 @@ exports.sendWinnerNotifications = onCall(async (request) => {
       const key = `${pos.row}-${pos.col}`;
       const selection = selectionsByPosition[key];
       if (selection) {
+        // Determine display type based on combined types
+        let displayType;
+        if (pos.types.includes("winner")) {
+          displayType = pos.types.includes("reverse") ? "WINNING SQUARE + BONUS" : "WINNING SQUARE";
+        } else if (pos.types.includes("adjacent")) {
+          displayType = pos.types.includes("reverse") ? "Adjacent + Bonus" : "Adjacent Square";
+        } else if (pos.types.includes("diagonal")) {
+          displayType = pos.types.includes("reverse") ? "Diagonal + Bonus" : "Diagonal Square";
+        } else if (pos.types.includes("reverse")) {
+          displayType = "REVERSE SCORE BONUS";
+        } else {
+          displayType = "Winner";
+        }
         winnersToNotify.push({
           ...pos,
+          type: displayType,
           userId: selection.userId,
           userName: selection.userName,
           entryNumber: selection.entryNumber || 1,
@@ -237,11 +263,7 @@ exports.sendWinnerNotifications = onCall(async (request) => {
 
       const totalPrize = userWins.wins.reduce((sum, w) => sum + w.prize, 0);
       const winDetails = userWins.wins.map((w) => {
-        const typeLabel = w.type === "winner" ? "WINNING SQUARE" :
-          w.type === "adjacent" ? "Adjacent Square" :
-          w.type === "diagonal" ? "Diagonal Square" :
-          w.type === "reverse" ? "REVERSE SCORE BONUS" : "Winner";
-        return `<li>${typeLabel}: $${w.prize}</li>`;
+        return `<li>${w.type}: $${w.prize}</li>`;
       }).join("");
 
       const mailOptions = {
@@ -359,8 +381,10 @@ exports.sendAdminSummary = onCall(async (request) => {
       awayTeamName = config.awayTeamName || "Away";
     }
 
-    // Get all quarter scores
-    const scoresSnapshot = await db.collection("game_scores").get();
+    // Get all ACTIVE quarter scores (not old/inactive ones)
+    const scoresSnapshot = await db.collection("game_scores")
+      .where("isActive", "==", true)
+      .get();
     const scoresByQuarter = {};
     scoresSnapshot.forEach((doc) => {
       const data = doc.data();
@@ -392,40 +416,67 @@ exports.sendAdminSummary = onCall(async (request) => {
 
       if (winningRow === -1 || winningCol === -1) continue;
 
-      // Define all winning positions for this quarter
-      const positions = [
-        { row: winningRow, col: winningCol, type: "Winner", prize: 2400 },
-        { row: (winningRow + 1) % 10, col: winningCol, type: "Adjacent", prize: 150 },
-        { row: (winningRow - 1 + 10) % 10, col: winningCol, type: "Adjacent", prize: 150 },
-        { row: winningRow, col: (winningCol + 1) % 10, type: "Adjacent", prize: 150 },
-        { row: winningRow, col: (winningCol - 1 + 10) % 10, type: "Adjacent", prize: 150 },
-        { row: (winningRow + 1) % 10, col: (winningCol + 1) % 10, type: "Diagonal", prize: 100 },
-        { row: (winningRow + 1) % 10, col: (winningCol - 1 + 10) % 10, type: "Diagonal", prize: 100 },
-        { row: (winningRow - 1 + 10) % 10, col: (winningCol + 1) % 10, type: "Diagonal", prize: 100 },
-        { row: (winningRow - 1 + 10) % 10, col: (winningCol - 1 + 10) % 10, type: "Diagonal", prize: 100 },
-      ];
+      // Build positions with combined prizes using a map
+      const positionPrizes = {};
 
-      // Add reverse +5 bonus for Q2 and Q4
+      const addPrize = (row, col, type, prize) => {
+        const key = `${row}-${col}`;
+        if (!positionPrizes[key]) {
+          positionPrizes[key] = { row, col, types: [], prize: 0 };
+        }
+        positionPrizes[key].types.push(type);
+        positionPrizes[key].prize += prize;
+      };
+
+      // Main winner ($2400)
+      addPrize(winningRow, winningCol, "winner", 2400);
+
+      // Adjacent squares ($150 each)
+      addPrize((winningRow + 1) % 10, winningCol, "adjacent", 150);
+      addPrize((winningRow - 1 + 10) % 10, winningCol, "adjacent", 150);
+      addPrize(winningRow, (winningCol + 1) % 10, "adjacent", 150);
+      addPrize(winningRow, (winningCol - 1 + 10) % 10, "adjacent", 150);
+
+      // Diagonal squares ($100 each)
+      addPrize((winningRow + 1) % 10, (winningCol + 1) % 10, "diagonal", 100);
+      addPrize((winningRow + 1) % 10, (winningCol - 1 + 10) % 10, "diagonal", 100);
+      addPrize((winningRow - 1 + 10) % 10, (winningCol + 1) % 10, "diagonal", 100);
+      addPrize((winningRow - 1 + 10) % 10, (winningCol - 1 + 10) % 10, "diagonal", 100);
+
+      // Add reverse +5 bonus for Q2 and Q4 (stacks with other prizes)
       if (quarter === 2 || quarter === 4) {
         const bonusHomeDigit = (score.awayScore + 5) % 10;
         const bonusAwayDigit = (score.homeScore + 5) % 10;
         const bonusRow = homeNumbers.indexOf(bonusHomeDigit);
         const bonusCol = awayNumbers.indexOf(bonusAwayDigit);
-        if (bonusRow !== -1 && bonusCol !== -1 && (bonusRow !== winningRow || bonusCol !== winningCol)) {
-          positions.push({ row: bonusRow, col: bonusCol, type: "Reverse+5", prize: 200 });
+        if (bonusRow !== -1 && bonusCol !== -1) {
+          addPrize(bonusRow, bonusCol, "reverse", 200);
         }
       }
 
       // Find winners for each position
-      for (const pos of positions) {
+      for (const pos of Object.values(positionPrizes)) {
         const key = `${quarter}-${pos.row}-${pos.col}`;
         const selection = selectionsByQuarterAndPosition[key];
         if (selection) {
+          // Determine display type based on combined types
+          let displayType;
+          if (pos.types.includes("winner")) {
+            displayType = pos.types.includes("reverse") ? "Winner + Bonus" : "Winner";
+          } else if (pos.types.includes("adjacent")) {
+            displayType = pos.types.includes("reverse") ? "Adjacent + Bonus" : "Adjacent";
+          } else if (pos.types.includes("diagonal")) {
+            displayType = pos.types.includes("reverse") ? "Diagonal + Bonus" : "Diagonal";
+          } else if (pos.types.includes("reverse")) {
+            displayType = "Reverse+5";
+          } else {
+            displayType = "Winner";
+          }
           allWinners.push({
             quarter: quarterNames[quarter],
             score: `${homeTeamName} ${score.homeScore} - ${awayTeamName} ${score.awayScore}`,
             userName: selection.userName,
-            type: pos.type,
+            type: displayType,
             prize: pos.prize,
           });
           grandTotal += pos.prize;
