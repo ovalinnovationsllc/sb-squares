@@ -40,6 +40,10 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   final GameConfigService _configService = GameConfigService();
   final VersionService _versionService = VersionService();
   final UserService _userService = UserService();
+
+  // Current user - refreshed from Firestore
+  late UserModel _currentUser;
+
   List<int> awayTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
   List<int> homeTeamNumbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
   BoardNumbersModel? _currentBoardNumbers;
@@ -71,11 +75,15 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   StreamSubscription<BoardNumbersModel?>? _boardNumbersSubscription;
   StreamSubscription<GameConfigModel>? _configSubscription;
   StreamSubscription<bool>? _versionSubscription;
+  StreamSubscription<UserModel?>? _userSubscription;
   
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+
+    // Initialize current user with widget value
+    _currentUser = widget.user;
 
     // Set up real-time stream subscriptions
     _setupStreamListeners();
@@ -88,7 +96,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
 
   void _checkShowCoachMarks() {
     // Only show on mobile devices and if user hasn't seen them
-    if (_isMobileDevice(context) && !widget.user.hasSeenCoachMarks) {
+    if (_isMobileDevice(context) && !_currentUser.hasSeenCoachMarks) {
       setState(() {
         _showCoachMarks = true;
       });
@@ -100,10 +108,10 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
       _showCoachMarks = false;
     });
     // Update Firestore to mark coach marks as seen
-    await _userService.markCoachMarksSeen(widget.user.id);
+    await _userService.markCoachMarksSeen(_currentUser.id);
 
     // Also update local storage so it persists across sessions
-    final updatedUser = widget.user.copyWith(hasSeenCoachMarks: true);
+    final updatedUser = _currentUser.copyWith(hasSeenCoachMarks: true);
     final userJson = jsonEncode(updatedUser.toJson());
     await PlatformStorage.setString('sb_squares_user', userJson);
   }
@@ -200,6 +208,20 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
         print('Error in version stream: $error');
       },
     );
+
+    // Listen to user stream for real-time user updates (e.g., numEntries changes)
+    _userSubscription = _userService.userStream(_currentUser.id).listen(
+      (user) {
+        if (mounted && user != null) {
+          setState(() {
+            _currentUser = user;
+          });
+        }
+      },
+      onError: (error) {
+        print('Error in user stream: $error');
+      },
+    );
   }
   
   
@@ -212,6 +234,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     _boardNumbersSubscription?.cancel();
     _configSubscription?.cancel();
     _versionSubscription?.cancel();
+    _userSubscription?.cancel();
 
     _tabController.dispose();
     super.dispose();
@@ -232,21 +255,9 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
       return;
     }
 
-    // Check if user has paid - if not, show payment required message
-    if (!widget.user.hasPaid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Payment required. Contact admin to activate account.'),
-          backgroundColor: Colors.orange,
-          duration: Duration(seconds: 3),
-        ),
-      );
-      return;
-    }
-
     final key = '$row-$col';
     final selectedSquares = _getQuarterMap(quarter);
-    final userName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
+    final userName = _currentUser.displayName.isEmpty ? _currentUser.email : _currentUser.displayName;
 
     // Check if square is already taken by another user
     if (selectedSquares.containsKey(key) && selectedSquares[key]!.userName != userName) {
@@ -265,10 +276,10 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     final isDeselecting = selectedSquares.containsKey(key) && selectedSquares[key]!.userName == userName;
 
     // Check if user has reached their limit for this quarter
-    if (!isDeselecting && _getUserQuarterSelectionCount(quarter) >= widget.user.numEntries) {
+    if (!isDeselecting && _getUserQuarterSelectionCount(quarter) >= _currentUser.numEntries) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('You have reached your maximum of ${widget.user.numEntries} square${widget.user.numEntries != 1 ? 's' : ''} for this quarter'),
+          content: Text('You have reached your maximum of ${_currentUser.numEntries} square${_currentUser.numEntries != 1 ? 's' : ''} for this quarter'),
           backgroundColor: Colors.orange,
           duration: const Duration(seconds: 2),
         ),
@@ -280,12 +291,12 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     final entryNumber = isDeselecting ? 1 : _getNextEntryNumber(quarter, userName);
 
     // Save to Firestore
-    print('Attempting to save selection: Q$quarter, ($row,$col) for user ${widget.user.id} (entry #$entryNumber)');
+    print('Attempting to save selection: Q$quarter, ($row,$col) for user ${_currentUser.id} (entry #$entryNumber)');
     final success = await _selectionService.saveSelection(
       quarter: quarter,
       row: row,
       col: col,
-      userId: widget.user.id,
+      userId: _currentUser.id,
       userName: userName,
       entryNumber: entryNumber,
     );
@@ -341,7 +352,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
 
   int _getUserSelectionsCount() {
     int count = 0;
-    final userName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
+    final userName = _currentUser.displayName.isEmpty ? _currentUser.email : _currentUser.displayName;
     count += q1SelectedSquares.values.where((v) => v.userName == userName).length;
     count += q2SelectedSquares.values.where((v) => v.userName == userName).length;
     count += q3SelectedSquares.values.where((v) => v.userName == userName).length;
@@ -350,7 +361,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   }
 
   int _getUserQuarterSelectionCount(int quarter) {
-    final userName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
+    final userName = _currentUser.displayName.isEmpty ? _currentUser.email : _currentUser.displayName;
     final selectedSquares = _getQuarterMap(quarter);
     return selectedSquares.values.where((v) => v.userName == userName).length;
   }
@@ -364,7 +375,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
         .toSet();
 
     // Find the lowest unused entry number starting from 1
-    for (int i = 1; i <= widget.user.numEntries; i++) {
+    for (int i = 1; i <= _currentUser.numEntries; i++) {
       if (!userSelections.contains(i)) {
         return i;
       }
@@ -564,7 +575,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     if (isSelected && squareOwnerName != null) {
       backgroundColor = UserColorGenerator.getColorForUser(squareOwnerName);
       borderColor = UserColorGenerator.getDarkColorForUser(squareOwnerName);
-      final currentUserName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
+      final currentUserName = _currentUser.displayName.isEmpty ? _currentUser.email : _currentUser.displayName;
       if (squareOwnerName == currentUserName) {
         backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwnerName);
       }
@@ -1270,7 +1281,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
               ),
             ],
           ),
-          if (widget.user.isAdmin)
+          if (_currentUser.isAdmin)
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: Icon(
@@ -1328,9 +1339,9 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
               children: [
                 Expanded(
                   child: Text(
-                    widget.user.displayName.isEmpty 
+                    _currentUser.displayName.isEmpty 
                         ? 'Welcome!' 
-                        : 'Welcome, ${widget.user.displayName}!',
+                        : 'Welcome, ${_currentUser.displayName}!',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -1340,20 +1351,16 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                   ),
                 ),
                 Text(
-                  widget.user.hasPaid 
-                      ? '${_getUserSelectionsCount()}/${widget.user.numEntries * 4} squares'
-                      : 'Payment Required',
+                  '${_getUserSelectionsCount()}/${_currentUser.numEntries * 4} squares',
                   style: TextStyle(
                     fontSize: 14,
-                    color: !widget.user.hasPaid
-                        ? Colors.orange.shade700
-                        : _getUserSelectionsCount() >= widget.user.numEntries * 4
-                            ? Colors.red 
-                            : Theme.of(context).colorScheme.onSurface,
-                    fontWeight: !widget.user.hasPaid ? FontWeight.bold : FontWeight.w500,
+                    color: _getUserSelectionsCount() >= _currentUser.numEntries * 4
+                        ? Colors.red
+                        : Theme.of(context).colorScheme.onSurface,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                if (widget.user.isAdmin)
+                if (_currentUser.isAdmin)
                   Padding(
                     padding: const EdgeInsets.only(left: 8.0),
                     child: Icon(
@@ -1404,65 +1411,41 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
           children: [
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
-              child: widget.user.hasPaid
-                          ? Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  '${_getUserQuarterSelectionCount(quarter)} of ${widget.user.numEntries} square${widget.user.numEntries != 1 ? 's' : ''} selected',
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                                ),
-                                if (_currentBoardNumbers != null) ...[
-                                  const SizedBox(width: 12),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.shade100,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: Colors.red.shade300),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.lock, size: 14, color: Colors.red.shade700),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'LOCKED',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.red.shade700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            )
-                          : Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.shade100,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.orange.shade300),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.lock, color: Colors.orange.shade700, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Payment required to select squares',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.orange.shade700,
-                                    ),
-                                  ),
-                                ],
-                              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '${_getUserQuarterSelectionCount(quarter)} of ${_currentUser.numEntries} square${_currentUser.numEntries != 1 ? 's' : ''} selected',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                  if (_currentBoardNumbers != null) ...[
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade100,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.red.shade300),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock, size: 14, color: Colors.red.shade700),
+                          const SizedBox(width: 4),
+                          Text(
+                            'LOCKED',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.red.shade700,
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
             Expanded(
               child: Padding(
@@ -1668,7 +1651,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                   borderColor = UserColorGenerator.getDarkColorForUser(squareOwnerName);
 
                                   // If it's the current user's square, make it slightly different
-                                  final currentUserName = widget.user.displayName.isEmpty ? widget.user.email : widget.user.displayName;
+                                  final currentUserName = _currentUser.displayName.isEmpty ? _currentUser.email : _currentUser.displayName;
                                   if (squareOwnerName == currentUserName) {
                                     backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwnerName);
                                   }
@@ -1794,10 +1777,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
 
                                 final cell = GestureDetector(
                                   onTap: () => _onSquareTapped(row, col, quarter),
-                                  child: Opacity(
-                                    opacity: widget.user.hasPaid ? 1.0 : 0.7,
-                                    child: cellContent,
-                                  ),
+                                  child: cellContent,
                                 );
 
                                 // Only show tooltip on desktop (not mobile) to avoid interfering with long-press

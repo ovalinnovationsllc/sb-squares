@@ -49,6 +49,23 @@ class UserService {
     }
   }
 
+  /// Stream for real-time user updates
+  Stream<UserModel?> userStream(String userId) {
+    return _firestore
+        .collection(_collection)
+        .doc(userId)
+        .snapshots()
+        .map((snapshot) {
+      if (!snapshot.exists) {
+        return null;
+      }
+      return UserModel.fromFirestore(
+        snapshot.data() as Map<String, dynamic>,
+        snapshot.id,
+      );
+    });
+  }
+
   Future<bool> createUser(UserModel user) async {
     try {
       // Security logging

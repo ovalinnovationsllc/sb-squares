@@ -786,6 +786,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   runSpacing: 8,
                   children: [
                     ElevatedButton.icon(
+                      onPressed: _resetForNewGame,
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: Text(MediaQuery.of(context).size.width > 600 ? 'Reset for New Game' : 'New Game'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange.shade700,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    ElevatedButton.icon(
                       onPressed: _publishAppUpdate,
                       icon: const Icon(Icons.system_update, size: 16),
                       label: Text(MediaQuery.of(context).size.width > 600 ? 'Publish Update' : 'Publish'),
@@ -870,6 +879,149 @@ class _AdminDashboardState extends State<AdminDashboard> {
         _showSnackBar('Update published! All users will be notified to refresh.');
       } else {
         _showSnackBar('Failed to publish update', isError: true);
+      }
+    }
+  }
+
+  void _resetForNewGame() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset for New Game'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This will reset the board for a new game by clearing:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.orange.shade700, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('All quarter scores'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.orange.shade700, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Board numbers'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.orange.shade700, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('All square selections'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'User accounts will NOT be deleted.',
+              style: TextStyle(
+                color: Colors.green.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'This action cannot be undone.',
+              style: TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade700,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reset for New Game'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 20),
+              Text('Resetting game...'),
+            ],
+          ),
+        ),
+      );
+
+      bool allSuccess = true;
+      List<String> errors = [];
+
+      // 1. Clear all quarter scores
+      for (int quarter = 1; quarter <= 4; quarter++) {
+        final success = await _gameScoreService.clearQuarterScore(quarter);
+        if (!success) {
+          allSuccess = false;
+          errors.add('Failed to clear Q$quarter score');
+        }
+      }
+
+      // 2. Clear board numbers
+      final boardNumbersSuccess = await _boardNumbersService.clearBoardNumbers();
+      if (!boardNumbersSuccess) {
+        allSuccess = false;
+        errors.add('Failed to clear board numbers');
+      }
+
+      // 3. Clear all square selections
+      final selectionsSuccess = await _selectionService.clearAllSelections();
+      if (!selectionsSuccess) {
+        allSuccess = false;
+        errors.add('Failed to clear square selections');
+      }
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show result
+      if (allSuccess) {
+        _showSnackBar('Game reset successfully! Ready for new game.');
+        await _loadUsers();
+      } else {
+        _showSnackBar('Some items could not be reset: ${errors.join(', ')}', isError: true);
+        await _loadUsers(); // Still reload to show current state
       }
     }
   }
