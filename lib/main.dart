@@ -288,7 +288,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
         _isCheckingDatabase = false;
         
         if (user == null) {
-          _emailError = 'Email not found. Access denied.';
+          _emailError = 'Email not found.\nPlease create an account using the link below.';
         } else {
           _emailError = null;
           // Allow unpaid users to view the board but not select squares
@@ -1039,9 +1039,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                         hintStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
                                         labelText: 'Email',
                                         labelStyle: const TextStyle(color: Colors.white),
-                                        errorText: _emailError,
-                                        errorStyle: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w500),
-                                        prefixIcon: const Icon(Icons.email, color: Colors.white70),
+                                                                                prefixIcon: const Icon(Icons.email, color: Colors.white70),
                                         suffixIcon: _isCheckingDatabase 
                                           ? const Padding(
                                               padding: EdgeInsets.all(12.0),
@@ -1057,11 +1055,17 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                           : null,
                                         enabledBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(15),
-                                          borderSide: BorderSide(color: Colors.white.withOpacity(0.5), width: 2),
+                                          borderSide: BorderSide(
+                                            color: _emailError != null ? Colors.redAccent : Colors.white.withOpacity(0.5),
+                                            width: 2,
+                                          ),
                                         ),
                                         focusedBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(15),
-                                          borderSide: const BorderSide(color: Colors.amber, width: 2),
+                                          borderSide: BorderSide(
+                                            color: _emailError != null ? Colors.redAccent : Colors.amber,
+                                            width: 2,
+                                          ),
                                         ),
                                         errorBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(15),
@@ -1079,6 +1083,19 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                         fillColor: Colors.black.withOpacity(0.3),
                                       ),
                                     ),
+                                    if (_emailError != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8.0),
+                                        child: Text(
+                                          _emailError!,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            color: Colors.redAccent,
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
                                     if (_emailController.text.isNotEmpty && _userExists && !_isCheckingDatabase)
                                       Padding(
                                         padding: const EdgeInsets.only(top: 8.0),
