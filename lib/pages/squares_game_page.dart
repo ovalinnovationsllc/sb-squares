@@ -303,28 +303,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     
     print('Save result: $success');
     
-    if (success) {
-      // Real-time updates will automatically sync the UI
-      
-      // Show feedback
-      if (isDeselecting) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Square deselected'),
-            backgroundColor: Colors.blue,
-            duration: Duration(seconds: 1),
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Square selected!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
-    } else {
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Failed to save selection. Please try again.'),
