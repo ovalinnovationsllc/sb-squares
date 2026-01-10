@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'config/security_config.dart';
 import 'models/user_model.dart';
@@ -23,6 +24,7 @@ import 'pages/squares_game_page.dart';
 import 'widgets/football_field_logo.dart';
 import 'widgets/super_bowl_banner.dart';
 import 'widgets/footer_widget.dart';
+import 'providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,7 +43,12 @@ void main() async {
   final configService = GameConfigService();
   await configService.createDefaultConfig();
 
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeProvider(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -49,23 +56,38 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Super Bowl Squares - 2026',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-        useMaterial3: true,
-        textTheme: GoogleFonts.rubikTextTheme(
-          ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.green)).textTheme,
-        ),
-        appBarTheme: AppBarTheme(
-          titleTextStyle: GoogleFonts.rubik(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        return MaterialApp(
+          title: 'Super Bowl Squares - 2026',
+          theme: themeProvider.lightTheme.copyWith(
+            textTheme: GoogleFonts.rubikTextTheme(
+              themeProvider.lightTheme.textTheme,
+            ),
+            appBarTheme: themeProvider.lightTheme.appBarTheme.copyWith(
+              titleTextStyle: GoogleFonts.rubik(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
           ),
-        ),
-      ),
-      home: const LaunchPage(),
+          darkTheme: themeProvider.darkTheme.copyWith(
+            textTheme: GoogleFonts.rubikTextTheme(
+              themeProvider.darkTheme.textTheme,
+            ),
+            appBarTheme: themeProvider.darkTheme.appBarTheme.copyWith(
+              titleTextStyle: GoogleFonts.rubik(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          home: const LaunchPage(),
+        );
+      },
     );
   }
 }
@@ -960,18 +982,27 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
               ),
             ),
           Expanded(
-            child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF1a472a),
-              Color(0xFF228B22),
-              Color(0xFF006400),
-            ],
-          ),
-        ),
+            child: Builder(
+              builder: (context) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                return Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: isDark
+                          ? [
+                              const Color(0xFF1a1a1a),
+                              const Color(0xFF2d2d2d),
+                              const Color(0xFF121212),
+                            ]
+                          : [
+                              const Color(0xFF1a472a),
+                              const Color(0xFF228B22),
+                              const Color(0xFF006400),
+                            ],
+                    ),
+                  ),
         child: SafeArea(
           child: SingleChildScrollView(
             padding: EdgeInsets.only(
@@ -1198,7 +1229,9 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
             ),
           ),
         ),
-      ),
+      );
+              },
+            ),
           ),
         ],
       ),

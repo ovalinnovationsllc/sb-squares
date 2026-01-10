@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../utils/web_reload_stub.dart'
     if (dart.library.html) '../utils/web_reload.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/user_model.dart';
+import '../providers/theme_provider.dart';
 import '../models/game_score_model.dart';
 import '../models/square_selection_model.dart';
 import '../models/board_numbers_model.dart';
@@ -395,7 +397,9 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
       context: context,
       barrierDismissible: true,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
+        builder: (context, setDialogState) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.all(16),
           child: Container(
@@ -404,7 +408,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
               maxHeight: MediaQuery.of(context).size.height * 0.8,
             ),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: isDark ? const Color(0xFF2d2d2d) : Colors.white,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
@@ -453,14 +457,15 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                     'Tap outside or X to close',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade600,
+                      color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
                     ),
                   ),
                 ),
               ],
             ),
           ),
-        ),
+        );
+        },
       ),
     );
   }
@@ -547,6 +552,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     final entryNumber = selection?.entryNumber ?? 1;
 
     // Determine the color based on user (same as main grid)
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     Color backgroundColor;
     Color borderColor = Colors.black;
     double borderWidth = 1.0;
@@ -559,7 +565,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
         backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwnerName);
       }
     } else {
-      backgroundColor = Colors.white;
+      backgroundColor = isDark ? const Color(0xFF3d3d3d) : Colors.white;
     }
 
     // Calculate total prize - check each prize independently
@@ -1232,12 +1238,17 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                 case 'instructions':
                   _showInstructions();
                   break;
+                case 'dark_mode':
+                  context.read<ThemeProvider>().toggleTheme();
+                  break;
                 case 'logout':
                   _logout();
                   break;
               }
             },
-            itemBuilder: (context) => [
+            itemBuilder: (context) {
+              final isDarkMode = context.watch<ThemeProvider>().isDarkMode;
+              return [
               const PopupMenuItem(
                 value: 'instructions',
                 child: Row(
@@ -1245,6 +1256,16 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                     Icon(Icons.help_outline),
                     SizedBox(width: 8),
                     Text('Game Instructions'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
+                value: 'dark_mode',
+                child: Row(
+                  children: [
+                    Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
+                    const SizedBox(width: 8),
+                    Text(isDarkMode ? 'Light Mode' : 'Dark Mode'),
                   ],
                 ),
               ),
@@ -1258,7 +1279,8 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                   ],
                 ),
               ),
-            ],
+            ];
+            },
           ),
           if (_currentUser.isAdmin)
             Padding(
@@ -1307,6 +1329,26 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                       const Icon(Icons.refresh, color: Colors.white, size: 18),
                     ],
                   ),
+                ),
+              ),
+            ),
+          // Congratulations banner when user has completed all picks
+          if (_getUserSelectionsCount() >= _currentUser.numEntries * 4)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.green.shade600, Colors.green.shade800],
+                ),
+              ),
+              child: const Text(
+                'You\'ve successfully chosen all your squares. Tune in on Sunday at 1pm to see if you\'re a (fake) winner!',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
                 ),
               ),
             ),
@@ -1567,14 +1609,19 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                         Positioned(
                           top: cellSize * 0.4,
                           left: cellSize * 0.5,
-                          child: Container(
-                            width: cellSize * 0.5,
-                            height: cellSize * 0.6,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade300,
-                              border: Border.all(color: Colors.black),
-                            ),
-                            child: const SizedBox(), // Empty corner
+                          child: Builder(
+                            builder: (context) {
+                              final isDark = Theme.of(context).brightness == Brightness.dark;
+                              return Container(
+                                width: cellSize * 0.5,
+                                height: cellSize * 0.6,
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade300,
+                                  border: Border.all(color: Colors.black),
+                                ),
+                                child: const SizedBox(), // Empty corner
+                              );
+                            },
                           ),
                         ),
                         
@@ -1624,6 +1671,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                 double borderWidth = 0.5;
 
                                 // Use user-specific colors for all squares (including winners)
+                                final isDark = Theme.of(context).brightness == Brightness.dark;
                                 if (isSelected && squareOwnerName != null) {
                                   // Generate a unique color for each user based on their name
                                   backgroundColor = UserColorGenerator.getColorForUser(squareOwnerName);
@@ -1635,7 +1683,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                     backgroundColor = UserColorGenerator.getOwnSquareColor(squareOwnerName);
                                   }
                                 } else {
-                                  backgroundColor = Colors.white;
+                                  backgroundColor = isDark ? const Color(0xFF2d2d2d) : Colors.white;
                                 }
 
                                 // Get special border for winning 3x3 area
