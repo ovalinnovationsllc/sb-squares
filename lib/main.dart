@@ -526,6 +526,9 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                             if (entries == null || entries < 1) {
                               return 'Please enter a valid number (1 or more)';
                             }
+                            if (entries > 3) {
+                              return 'Maximum 3 entries per account';
+                            }
                             if (entries > remainingEntries) {
                               return 'Only $remainingEntries entries available';
                             }
@@ -534,7 +537,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Each entry costs \$150',
+                          'Each entry costs \$150 (max 3 per account)',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.7),
                             fontSize: 12,

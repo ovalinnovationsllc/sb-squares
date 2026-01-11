@@ -11,7 +11,7 @@ class SecurityConfig {
   
   // App settings
   static const bool requireAdminForAccess = true;
-  static const int maxEntriesPerUser = 100;
+  static const int maxEntriesPerUser = 3;
   static const bool enableUserSelfRegistration = false;
   
   // Check if an email should have admin privileges
