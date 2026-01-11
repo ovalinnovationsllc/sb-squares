@@ -1004,22 +1004,22 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                     ),
                   ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(context).viewInsets.bottom,
-            ),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: MediaQuery.of(context).size.height - 
-                    MediaQuery.of(context).padding.top - 
-                    MediaQuery.of(context).padding.bottom,
-              ),
-              child: IntrinsicHeight(
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: Center(
-                        child: AnimatedBuilder(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: constraints.maxHeight,
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const SizedBox(height: 20),
+                      AnimatedBuilder(
                           animation: _controller,
                           builder: (context, child) {
                             return FadeTransition(
@@ -1220,13 +1220,13 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                             );
                           },
                         ),
-                      ),
-                    ),
-                    const FooterWidget(),
-                  ],
+                      const SizedBox(height: 20),
+                      const FooterWidget(),
+                    ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       );

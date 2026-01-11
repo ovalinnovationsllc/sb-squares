@@ -199,6 +199,42 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  Future<void> _clearUserSquares(UserModel user) async {
+    final userName = user.displayName.isEmpty ? user.email : user.displayName;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear User Squares'),
+        content: Text(
+          'Are you sure you want to remove all square selections for $userName?\n\n'
+          'This will delete their squares from all quarters.\n\n'
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: _errorColor),
+            child: const Text('Clear Squares'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await _selectionService.clearUserSelections(user.id);
+      if (success) {
+        _showSnackBar('Squares cleared for $userName');
+      } else {
+        _showSnackBar('Error clearing squares', isError: true);
+      }
+    }
+  }
+
   void _showSnackBar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -2111,15 +2147,21 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             color: _secondaryColor,
                           ),
                           IconButton(
-                            onPressed: user.id == widget.currentUser.id 
-                                ? null 
+                            onPressed: () => _clearUserSquares(user),
+                            icon: const Icon(Icons.grid_off, size: 20),
+                            tooltip: 'Clear Squares',
+                            color: Colors.orange,
+                          ),
+                          IconButton(
+                            onPressed: user.id == widget.currentUser.id
+                                ? null
                                 : () => _deleteUser(user),
                             icon: const Icon(Icons.delete, size: 20),
-                            tooltip: user.id == widget.currentUser.id 
-                                ? 'Cannot delete self' 
+                            tooltip: user.id == widget.currentUser.id
+                                ? 'Cannot delete self'
                                 : 'Delete User',
-                            color: user.id == widget.currentUser.id 
-                                ? _onSurfaceVariantColor 
+                            color: user.id == widget.currentUser.id
+                                ? _onSurfaceVariantColor
                                 : _errorColor,
                           ),
                         ],
@@ -2179,6 +2221,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                     onPressed: () => _showEditUserDialog(user),
                                     icon: const Icon(Icons.edit, size: 20),
                                     tooltip: 'Edit User',
+                                  ),
+                                  IconButton(
+                                    onPressed: () => _clearUserSquares(user),
+                                    icon: const Icon(Icons.grid_off, size: 20, color: Colors.orange),
+                                    tooltip: 'Clear Squares',
                                   ),
                                   IconButton(
                                     onPressed: () => _deleteUser(user),

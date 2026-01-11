@@ -236,6 +236,40 @@ class SquareSelectionService {
     }
   }
 
+  // Clear all selections for a specific user (admin only)
+  Future<bool> clearUserSelections(String userId) async {
+    try {
+      final batch = _firestore.batch();
+
+      final userSelections = await _firestore
+          .collection(_collection)
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      int count = 0;
+      for (final doc in userSelections.docs) {
+        batch.delete(doc.reference);
+        count++;
+
+        // Firestore batch limit is 500 operations
+        if (count >= 500) {
+          await batch.commit();
+          count = 0;
+        }
+      }
+
+      if (count > 0) {
+        await batch.commit();
+      }
+
+      print('Cleared all selections for user $userId');
+      return true;
+    } catch (e) {
+      print('Error clearing user selections: $e');
+      return false;
+    }
+  }
+
   // Get count of selections per quarter
   Future<Map<int, int>> getSelectionCounts() async {
     try {
