@@ -1432,39 +1432,81 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
           children: [
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Column(
                 children: [
-                  Text(
-                    '${_getUserQuarterSelectionCount(quarter)} of ${_currentUser.numEntries} square${_currentUser.numEntries != 1 ? 's' : ''} selected',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                  if (_currentBoardNumbers != null) ...[
-                    const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade100,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.red.shade300),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '${_getUserQuarterSelectionCount(quarter)} of ${_currentUser.numEntries} square${_currentUser.numEntries != 1 ? 's' : ''} selected',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.lock, size: 14, color: Colors.red.shade700),
-                          const SizedBox(width: 4),
-                          Text(
-                            'LOCKED',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.red.shade700,
-                            ),
+                      if (_currentBoardNumbers != null) ...[
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.red.shade300),
                           ),
-                        ],
-                      ),
-                    ),
-                  ],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.lock, size: 14, color: Colors.red.shade700),
+                              const SizedBox(width: 4),
+                              Text(
+                                'LOCKED',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.red.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  // Quarter score display
+                  Builder(
+                    builder: (context) {
+                      final score = _quarterScores.firstWhere(
+                        (s) => s.quarter == quarter,
+                        orElse: () => GameScoreModel(id: '', quarter: quarter, homeScore: 0, awayScore: 0),
+                      );
+                      if (score.id.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber.shade400),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.sports_football, size: 18, color: Colors.brown),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Q$quarter Score: $_homeTeamName ${score.homeScore} - $_awayTeamName ${score.awayScore}',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.brown.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
