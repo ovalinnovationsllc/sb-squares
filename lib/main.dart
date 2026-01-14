@@ -471,7 +471,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                               Expanded(
                                 child: Text(
                                   errorMessage!,
-                                  style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+                                  style: const TextStyle(color: Colors.white, fontSize: 14),
                                 ),
                               ),
                             ],
@@ -637,6 +637,11 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
       labelText: label,
       labelStyle: const TextStyle(color: Colors.white70),
       prefixIcon: Icon(icon, color: Colors.white70),
+      errorStyle: const TextStyle(
+        color: Colors.amber,
+        fontWeight: FontWeight.w500,
+        fontSize: 13,
+      ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),
@@ -647,11 +652,11 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.redAccent),
+        borderSide: const BorderSide(color: Colors.amber),
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+        borderSide: const BorderSide(color: Colors.amber, width: 2),
       ),
       filled: true,
       fillColor: Colors.black.withOpacity(0.3),
@@ -783,7 +788,7 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                             Expanded(
                               child: Text(
                                 errorMessage!,
-                                style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+                                style: const TextStyle(color: Colors.white, fontSize: 14),
                               ),
                             ),
                           ],
@@ -1090,24 +1095,24 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                         enabledBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(15),
                                           borderSide: BorderSide(
-                                            color: _emailError != null ? Colors.redAccent : Colors.white.withOpacity(0.5),
+                                            color: _emailError != null ? Colors.amber : Colors.white.withOpacity(0.5),
                                             width: 2,
                                           ),
                                         ),
                                         focusedBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(15),
-                                          borderSide: BorderSide(
-                                            color: _emailError != null ? Colors.redAccent : Colors.amber,
+                                          borderSide: const BorderSide(
+                                            color: Colors.amber,
                                             width: 2,
                                           ),
                                         ),
                                         errorBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(15),
-                                          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+                                          borderSide: const BorderSide(color: Colors.amber, width: 2),
                                         ),
                                         focusedErrorBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(15),
-                                          borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+                                          borderSide: const BorderSide(color: Colors.amber, width: 2),
                                         ),
                                         disabledBorder: OutlineInputBorder(
                                           borderRadius: BorderRadius.circular(15),
@@ -1124,9 +1129,9 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
                                           _emailError!,
                                           textAlign: TextAlign.center,
                                           style: const TextStyle(
-                                            color: Colors.redAccent,
+                                            color: Colors.amber,
                                             fontWeight: FontWeight.w500,
-                                            fontSize: 14,
+                                            fontSize: 13,
                                           ),
                                         ),
                                       ),
