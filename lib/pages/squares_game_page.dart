@@ -986,8 +986,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                       const SizedBox(height: 12),
                       const Text(
                         'Will pay the winning quarter score and each adjacent and diagonal box!\n'
-                        'The board is never ending and a perpetual cylinder on the edges - wrap it!\n'
-                        'Box assignment will be a random draw',
+                        'The board is never ending and a perpetual cylinder on the edges - wrap it!\n',
                         style: TextStyle(fontSize: 14),
                         textAlign: TextAlign.center,
                       ),
@@ -1115,6 +1114,12 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                 fontSize: 12,
                                 color: Colors.white,
                               ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              '* There will be no OT payout if the game goes to Overtime! *',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                               textAlign: TextAlign.center,
                             ),
                           ],
@@ -1343,7 +1348,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                 ),
               ),
               child: const Text(
-                'You\'ve successfully chosen all your squares. Tune in on Sunday at 1pm to see if you\'re a (fake) winner!',
+                'You\'ve successfully chosen all your squares. Tune in on February 8th at 6:30pm to see if you\'re a winner!',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,

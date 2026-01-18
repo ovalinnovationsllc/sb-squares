@@ -184,8 +184,7 @@ class WelcomeScreen extends StatelessWidget {
                         children: [
                           Text(
                             'Will pay the winning quarter score and each adjacent and diagonal box!\n'
-                            'The board is never ending and a perpetual cylinder on the edges - wrap it!\n'
-                            'Box assignment will be a random draw',
+                            'The board is never ending and a perpetual cylinder on the edges - wrap it!\n',
                             style: TextStyle(fontSize: 15),
                             textAlign: TextAlign.center,
                           ),
@@ -302,6 +301,12 @@ class WelcomeScreen extends StatelessWidget {
                             'Ex: Score 17 - 10  (Change to 0-7 and add 5 = winner of 5 and 2)',
                             style: TextStyle(fontSize: 14),
                           ),
+                          SizedBox(height: 8),
+                          Text(
+                            '* There will be no OT payout if the game goes to Overtime! *',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                            textAlign: TextAlign.center,
+                          ),
                         ],
                       ),
                     ),
@@ -326,7 +331,7 @@ class WelcomeScreen extends StatelessWidget {
                           ),
                           SizedBox(height: 8),
                           Text(
-                            'Will change the board number layout each quarter - re-randomize score boxes!!',
+                            'One set of randomized numbers will be posted prior to the game!!',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
