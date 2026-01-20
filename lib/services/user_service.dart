@@ -66,6 +66,22 @@ class UserService {
     });
   }
 
+  /// Stream for real-time updates of all users
+  Stream<List<UserModel>> usersStream() {
+    return _firestore
+        .collection(_collection)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return UserModel.fromFirestore(
+          doc.data(),
+          doc.id,
+        );
+      }).toList();
+    });
+  }
+
   Future<bool> createUser(UserModel user) async {
     try {
       // Security logging
@@ -166,17 +182,28 @@ class UserService {
   Future<Map<String, dynamic>> getUserStats() async {
     try {
       final users = await getAllUsers();
-      
+
       return {
         'totalUsers': users.length,
         'paidUsers': users.where((user) => user.hasPaid).length,
         'unpaidUsers': users.where((user) => !user.hasPaid).length,
-        'totalEntries': users.fold(0, (sum, user) => sum + user.numEntries),
+        'totalEntries': users.fold<int>(0, (sum, user) => sum + user.numEntries),
         'adminUsers': users.where((user) => user.isAdmin).length,
       };
     } catch (e) {
       print('Error getting user stats: $e');
       return {};
+    }
+  }
+
+  /// Get total entries allocated to all users
+  Future<int> getTotalAllocatedEntries() async {
+    try {
+      final users = await getAllUsers();
+      return users.fold<int>(0, (sum, user) => sum + user.numEntries);
+    } catch (e) {
+      print('Error getting total allocated entries: $e');
+      return 0;
     }
   }
 

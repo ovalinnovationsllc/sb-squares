@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../utils/platform_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -44,6 +45,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
   String? _error;
   String _sortFilter = 'all'; // 'all', 'paid', 'unpaid'
   String _searchQuery = '';
+
+  // Stream subscriptions for real-time updates
+  StreamSubscription<List<UserModel>>? _usersSubscription;
+  StreamSubscription<List<GameScoreModel>>? _scoresSubscription;
+  StreamSubscription<BoardNumbersModel?>? _boardNumbersSubscription;
+  StreamSubscription<GameConfigModel>? _configSubscription;
   
   // Theme-based color scheme
   ColorScheme get _colorScheme => Theme.of(context).colorScheme;
@@ -57,12 +64,77 @@ class _AdminDashboardState extends State<AdminDashboard> {
   @override
   void initState() {
     super.initState();
-    _loadUsers();
+    _setupStreams();
     _searchController.addListener(_onSearchChanged);
+  }
+
+  void _setupStreams() {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    // Listen to users stream for real-time updates
+    _usersSubscription = _userService.usersStream().listen(
+      (users) {
+        if (mounted) {
+          setState(() {
+            _users = users;
+            _applyFilter();
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (e) {
+        if (mounted) {
+          setState(() {
+            _error = 'Error loading users: $e';
+            _isLoading = false;
+          });
+        }
+      },
+    );
+
+    // Listen to scores stream
+    _scoresSubscription = _gameScoreService.scoresStream().listen(
+      (scores) {
+        if (mounted) {
+          setState(() {
+            _quarterScores = scores;
+          });
+        }
+      },
+    );
+
+    // Listen to board numbers stream
+    _boardNumbersSubscription = _boardNumbersService.boardNumbersStream().listen(
+      (boardNumbers) {
+        if (mounted) {
+          setState(() {
+            _currentBoardNumbers = boardNumbers;
+          });
+        }
+      },
+    );
+
+    // Listen to config stream
+    _configSubscription = _configService.configStream().listen(
+      (config) {
+        if (mounted) {
+          setState(() {
+            _currentConfig = config;
+          });
+        }
+      },
+    );
   }
 
   @override
   void dispose() {
+    _usersSubscription?.cancel();
+    _scoresSubscription?.cancel();
+    _boardNumbersSubscription?.cancel();
+    _configSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }

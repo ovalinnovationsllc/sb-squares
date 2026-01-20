@@ -373,18 +373,17 @@ class _LaunchPageState extends State<LaunchPage> with SingleTickerProviderStateM
     final entriesController = TextEditingController();
     bool isSubmitting = false;
     String? errorMessage;
-    int squaresUsed = 0;
+    int allocatedEntries = 0;
     int remainingEntries = 100;
     const int maxTotalEntries = 100;
 
-    // Fetch actual squares used from selections
-    final selectionService = SquareSelectionService();
+    // Fetch total entries allocated to all users
     try {
-      squaresUsed = await selectionService.getUniqueSquaresCount();
-      remainingEntries = maxTotalEntries - squaresUsed;
+      allocatedEntries = await _userService.getTotalAllocatedEntries();
+      remainingEntries = maxTotalEntries - allocatedEntries;
       if (remainingEntries < 0) remainingEntries = 0;
     } catch (e) {
-      print('Error fetching squares count: $e');
+      print('Error fetching allocated entries: $e');
     }
 
     if (!mounted) return;

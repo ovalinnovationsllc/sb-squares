@@ -263,6 +263,51 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
 
     // Check if square is already taken by another user
     if (selectedSquares.containsKey(key) && selectedSquares[key]!.userName != userName) {
+      // If admin, allow them to remove the square
+      if (_currentUser.isAdmin) {
+        final selection = selectedSquares[key]!;
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Remove Square'),
+            content: Text('Remove this square from ${selection.userName}?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                child: const Text('Remove'),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmed == true) {
+          final success = await _selectionService.removeSelection(selection.id);
+          if (success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Removed square from ${selection.userName}'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to remove square'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        }
+        return;
+      }
+
       // Square is taken by someone else, show message
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
