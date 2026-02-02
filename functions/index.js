@@ -548,7 +548,7 @@ exports.sendAdminSummary = onCall(async (request) => {
           </div>
           <div style="padding: 30px; background: #f9f9f9;">
             <div style="background: #FFD700; color: #1a472a; font-size: 24px; font-weight: bold; padding: 15px; text-align: center; border-radius: 10px; margin-bottom: 25px;">
-              Total Prizes Awarded: $${grandTotal}
+              38 Total Prizes Awarded: $${grandTotal}
             </div>
             ${quarterSections}
           </div>
