@@ -31,6 +31,29 @@
 
   <title>Super Bowl Squares - 2026</title>
   <!-- PWA disabled - manifest removed to prevent caching issues -->
+
+  <!-- Print styles for board printing -->
+  <style>
+    @media print {
+      /* Hide non-essential elements when printing */
+      body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      /* Ensure the canvas/flutter content fills the page */
+      flt-glass-pane {
+        width: 100% !important;
+        height: auto !important;
+      }
+
+      /* Force landscape for better board fit */
+      @page {
+        size: landscape;
+        margin: 0.5in;
+      }
+    }
+  </style>
   
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>

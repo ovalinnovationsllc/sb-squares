@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../utils/web_reload_stub.dart'
@@ -71,6 +72,10 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
   // Coach marks overlay
   bool _showCoachMarks = false;
 
+  // Pinch-to-zoom controller for mobile
+  final TransformationController _zoomController = TransformationController();
+  bool _isZoomedIn = false;
+
   // Stream subscriptions for real-time updates
   StreamSubscription<List<SquareSelectionModel>>? _selectionsSubscription;
   StreamSubscription<List<GameScoreModel>>? _scoresSubscription;
@@ -84,6 +89,12 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
 
+    // Reset zoom when changing tabs
+    _tabController.addListener(_onTabChanged);
+
+    // Track zoom state for enabling/disabling pan
+    _zoomController.addListener(_onZoomChanged);
+
     // Initialize current user with widget value
     _currentUser = widget.user;
 
@@ -94,6 +105,27 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkShowCoachMarks();
     });
+  }
+
+  void _onTabChanged() {
+    // Reset zoom when switching tabs
+    if (_tabController.indexIsChanging) {
+      _zoomController.value = Matrix4.identity();
+      setState(() {
+        _isZoomedIn = false;
+      });
+    }
+  }
+
+  void _onZoomChanged() {
+    // Check if zoomed in (scale > 1.05 to account for small floating point differences)
+    final scale = _zoomController.value.getMaxScaleOnAxis();
+    final isZoomed = scale > 1.05;
+    if (isZoomed != _isZoomedIn) {
+      setState(() {
+        _isZoomedIn = isZoomed;
+      });
+    }
   }
 
   void _checkShowCoachMarks() {
@@ -238,7 +270,10 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     _versionSubscription?.cancel();
     _userSubscription?.cancel();
 
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    _zoomController.removeListener(_onZoomChanged);
+    _zoomController.dispose();
     super.dispose();
   }
 
@@ -428,6 +463,110 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
     if (kIsWeb) {
       reloadWebPage();
     }
+  }
+
+  /// Print the board (web only) - prints all 4 quarters
+  void _printBoard(int quarter) {
+    if (kIsWeb) {
+      // Generate HTML for all 4 quarters
+      final html = _generatePrintHtml();
+      printBoardHtml(html);
+    }
+  }
+
+  /// Generate HTML representation of all 4 quarters for printing
+  String _generatePrintHtml() {
+    final buffer = StringBuffer();
+
+    // Get team numbers (or placeholder if not set)
+    final homeNums = _currentBoardNumbers != null ? homeTeamNumbers : List.generate(10, (i) => i);
+    final awayNums = _currentBoardNumbers != null ? awayTeamNumbers : List.generate(10, (i) => i);
+
+    buffer.writeln('<html><head><title>Super Bowl Squares - $_homeTeamName vs $_awayTeamName</title>');
+    buffer.writeln('<style>');
+    buffer.writeln('@page { size: landscape; margin: 0.25in; }');
+    buffer.writeln('body { font-family: Arial, sans-serif; margin: 0; padding: 10px; }');
+    buffer.writeln('h1 { text-align: center; margin: 5px 0; font-size: 18px; }');
+    buffer.writeln('.quarters { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }');
+    buffer.writeln('.quarter { page-break-inside: avoid; }');
+    buffer.writeln('.quarter h2 { text-align: center; margin: 5px 0; font-size: 14px; background: #333; color: white; padding: 4px; }');
+    buffer.writeln('table { border-collapse: collapse; width: 100%; }');
+    buffer.writeln('td, th { border: 1px solid #333; text-align: center; padding: 2px; font-size: 9px; }');
+    buffer.writeln('.team-header { background: #1a472a; color: white; font-weight: bold; font-size: 10px; }');
+    buffer.writeln('.team-num { background: #e8f5e9; font-weight: bold; font-size: 10px; }');
+    buffer.writeln('.cell { min-width: 28px; height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }');
+    buffer.writeln('.winner { background: #ffd700 !important; font-weight: bold; }');
+    buffer.writeln('.empty { background: #fff; }');
+    buffer.writeln('@media print { .quarters { grid-template-columns: 1fr 1fr; } }');
+    buffer.writeln('</style></head><body>');
+
+    buffer.writeln('<h1>Super Bowl Squares - $_homeTeamName vs $_awayTeamName</h1>');
+    buffer.writeln('<div class="quarters">');
+
+    // Generate each quarter
+    for (int q = 1; q <= 4; q++) {
+      final selectedSquares = _getQuarterMap(q);
+      final score = _quarterScores.firstWhere(
+        (s) => s.quarter == q,
+        orElse: () => GameScoreModel(id: '', quarter: q, homeScore: 0, awayScore: 0),
+      );
+      final hasScore = score.id.isNotEmpty;
+
+      // Find winner position if score exists
+      int? winnerRow, winnerCol;
+      if (hasScore && _currentBoardNumbers != null) {
+        final homeDigit = score.homeScore % 10;
+        final awayDigit = score.awayScore % 10;
+        for (int r = 0; r < 10; r++) {
+          if (homeNums[r] == homeDigit) winnerRow = r;
+        }
+        for (int c = 0; c < 10; c++) {
+          if (awayNums[c] == awayDigit) winnerCol = c;
+        }
+      }
+
+      buffer.writeln('<div class="quarter">');
+      buffer.writeln('<h2>Quarter $q${hasScore ? " - $_homeTeamName ${score.homeScore}, $_awayTeamName ${score.awayScore}" : ""}</h2>');
+      buffer.writeln('<table>');
+
+      // Away team header row
+      buffer.writeln('<tr><th class="team-header"></th>');
+      for (int c = 0; c < 10; c++) {
+        buffer.writeln('<th class="team-num">${awayNums[c]}</th>');
+      }
+      buffer.writeln('</tr>');
+
+      // Grid rows
+      for (int r = 0; r < 10; r++) {
+        buffer.writeln('<tr>');
+        buffer.writeln('<th class="team-num">${homeNums[r]}</th>');
+        for (int c = 0; c < 10; c++) {
+          final key = '$r-$c';
+          final selection = selectedSquares[key];
+          final isWinner = (r == winnerRow && c == winnerCol);
+          final cellClass = isWinner ? 'cell winner' : (selection != null ? 'cell' : 'cell empty');
+          final bgColor = selection != null && !isWinner ? _getUserColorHex(selection.userName) : '';
+          final style = bgColor.isNotEmpty ? 'style="background-color: $bgColor; color: white;"' : '';
+          final name = selection?.userName ?? '';
+          buffer.writeln('<td class="$cellClass" $style>$name</td>');
+        }
+        buffer.writeln('</tr>');
+      }
+
+      buffer.writeln('</table>');
+      buffer.writeln('</div>');
+    }
+
+    buffer.writeln('</div>');
+    buffer.writeln('</body></html>');
+
+    return buffer.toString();
+  }
+
+  /// Get a hex color for a user (for print CSS)
+  String _getUserColorHex(String userName) {
+    final color = UserColorGenerator.getColorForUser(userName);
+    return '#${color.value.toRadixString(16).substring(2)}';
   }
 
   /// Show zoomed quadrant dialog for mobile users
@@ -678,7 +817,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                     '\$$prizeMoney',
                     style: GoogleFonts.rubik(
                       color: Colors.white,
-                      fontSize: 10,
+                      fontSize: (cellSize * 0.18).clamp(11.0, 16.0),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -692,14 +831,14 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                 child: Text(
                   entryNumber <= 10 ? circledNumbers[entryNumber - 1] : '$entryNumber',
                   style: TextStyle(
-                    fontSize: cellSize * 0.2,
+                    fontSize: (cellSize * 0.22).clamp(10.0, 16.0),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
-                    shadows: [
+                    shadows: const [
                       Shadow(
-                        color: Colors.black.withValues(alpha: 0.7),
+                        color: Colors.black,
                         blurRadius: 2,
-                        offset: const Offset(0.5, 0.5),
+                        offset: Offset(0.5, 0.5),
                       ),
                     ],
                   ),
@@ -713,14 +852,19 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                       child: Text(
                         squareOwnerName,
                         style: TextStyle(
-                          fontSize: cellSize * 0.18,
+                          fontSize: (cellSize * 0.22).clamp(12.0, 18.0),
                           fontWeight: FontWeight.w600,
                           color: Colors.white,
-                          shadows: [
+                          shadows: const [
                             Shadow(
-                              color: Colors.black.withValues(alpha: 0.6),
+                              color: Colors.black,
                               blurRadius: 2,
-                              offset: const Offset(1, 1),
+                              offset: Offset(1, 1),
+                            ),
+                            Shadow(
+                              color: Colors.black,
+                              blurRadius: 1,
+                              offset: Offset(-0.5, -0.5),
                             ),
                           ],
                         ),
@@ -1291,6 +1435,12 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                 case 'dark_mode':
                   context.read<ThemeProvider>().toggleTheme();
                   break;
+                case 'print':
+                  // Delay to let menu close first
+                  Future.delayed(const Duration(milliseconds: 200), () {
+                    _printBoard(_tabController.index + 1);
+                  });
+                  break;
                 case 'logout':
                   _logout();
                   break;
@@ -1319,6 +1469,17 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                   ],
                 ),
               ),
+              if (kIsWeb)
+                const PopupMenuItem(
+                  value: 'print',
+                  child: Row(
+                    children: [
+                      Icon(Icons.print_outlined, size: 24),
+                      SizedBox(width: 8),
+                      Text('Print Board'),
+                    ],
+                  ),
+                ),
               const PopupMenuItem(
                 value: 'logout',
                 child: Row(
@@ -1408,19 +1569,50 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
             color: Theme.of(context).colorScheme.inversePrimary.withValues(alpha: 0.1),
             child: Row(
               children: [
-                Expanded(
-                  child: Text(
-                    _currentUser.displayName.isEmpty 
-                        ? 'Welcome!' 
-                        : 'Welcome, ${_currentUser.displayName}!',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+                Text(
+                  _currentUser.displayName.isEmpty
+                      ? 'Welcome!'
+                      : 'Welcome, ${_currentUser.displayName}!',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
+                // Zoom hint for desktop - centered and prominent
+                if (!_isMobileDevice(context))
+                  Expanded(
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.blue.shade900
+                              : Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.blue.shade700
+                                : Colors.blue.shade200,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          '🖱 Scroll to zoom • Drag to pan',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.blue.shade200
+                                : Colors.blue.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_isMobileDevice(context))
+                  const Spacer(),
                 Text(
                   '${_getUserSelectionsCount()}/${_currentUser.numEntries * 4} squares',
                   style: TextStyle(
@@ -1563,12 +1755,16 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.only(top: 12.0),
-                child: AspectRatio(
-                  aspectRatio: 1.0,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final double gridSize = constraints.maxWidth;
-                    final double cellSize = gridSize / 11;
+                child: Builder(
+                  builder: (context) {
+                    final isMobile = _isMobileDevice(context);
+
+                    final gridWidget = AspectRatio(
+                      aspectRatio: 1.0,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final double gridSize = constraints.maxWidth;
+                          final double cellSize = gridSize / 11;
 
                     // Get NFL team colors
                     final homeColors = NFLTeamColors.getTeamColors(_homeTeamName);
@@ -1629,7 +1825,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                       _currentBoardNumbers != null ? '${awayTeamNumbers[i]}' : '',
                                       style: GoogleFonts.rubik(
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 14,
+                                        fontSize: (cellSize * 0.35).clamp(12.0, 20.0),
                                         color: awayPrimary,
                                       ),
                                     ),
@@ -1688,7 +1884,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                       _currentBoardNumbers != null ? '${homeTeamNumbers[i]}' : '',
                                       style: GoogleFonts.rubik(
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 14,
+                                        fontSize: (cellSize * 0.35).clamp(12.0, 20.0),
                                         color: homePrimary,
                                       ),
                                     ),
@@ -1760,7 +1956,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                 // Determine the color based on square type and user
                                 Color backgroundColor;
                                 Color borderColor = Colors.black;
-                                double borderWidth = 0.5;
+                                double borderWidth = 1.0;
 
                                 // Use user-specific colors for all squares (including winners)
                                 final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1840,7 +2036,7 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                                 '\$$prizeMoney',
                                                 style: GoogleFonts.rubik(
                                                   color: Colors.white,
-                                                  fontSize: 8,
+                                                  fontSize: (cellSize * 0.22).clamp(9.0, 14.0),
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               ),
@@ -1854,14 +2050,14 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                             child: Text(
                                               entryNumber <= 10 ? circledNumbers[entryNumber - 1] : '$entryNumber',
                                               style: TextStyle(
-                                                fontSize: cellSize * 0.18,
+                                                fontSize: (cellSize * 0.22).clamp(8.0, 12.0),
                                                 fontWeight: FontWeight.bold,
                                                 color: Colors.white,
-                                                shadows: [
+                                                shadows: const [
                                                   Shadow(
-                                                    color: Colors.black.withValues(alpha: 0.7),
+                                                    color: Colors.black,
                                                     blurRadius: 2,
-                                                    offset: const Offset(0.5, 0.5),
+                                                    offset: Offset(0.5, 0.5),
                                                   ),
                                                 ],
                                               ),
@@ -1870,23 +2066,31 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                                         // Owner name in center
                                         Center(
                                           child: isSelected && squareOwnerName != null
-                                            ? Text(
-                                                squareOwnerName,
-                                                style: TextStyle(
-                                                  fontSize: cellSize * 0.15,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: Colors.white,
-                                                  shadows: [
-                                                    Shadow(
-                                                      color: Colors.black.withValues(alpha: 0.5),
-                                                      blurRadius: 2,
-                                                      offset: const Offset(1, 1),
-                                                    ),
-                                                  ],
+                                            ? Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 1),
+                                                child: Text(
+                                                  squareOwnerName,
+                                                  style: TextStyle(
+                                                    fontSize: (cellSize * 0.22).clamp(8.0, 14.0),
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.white,
+                                                    shadows: const [
+                                                      Shadow(
+                                                        color: Colors.black,
+                                                        blurRadius: 2,
+                                                        offset: Offset(1, 1),
+                                                      ),
+                                                      Shadow(
+                                                        color: Colors.black,
+                                                        blurRadius: 1,
+                                                        offset: Offset(-0.5, -0.5),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  maxLines: 1,
                                                 ),
-                                                textAlign: TextAlign.center,
-                                                overflow: TextOverflow.ellipsis,
-                                                maxLines: 1,
                                               )
                                             : null,
                                         ),
@@ -1913,11 +2117,135 @@ class _SquaresGamePageState extends State<SquaresGamePage> with SingleTickerProv
                           ),
                           ),
                         ),
+                          ],
+                        );
+                      },
+                    ),
+                  );
+
+                    // Wrap in InteractiveViewer for zoom support
+                    return Stack(
+                      children: [
+                        Listener(
+                          onPointerSignal: (event) {
+                            // Handle mouse scroll wheel for zoom on desktop
+                            if (event is PointerScrollEvent && !isMobile) {
+                              final currentScale = _zoomController.value.getMaxScaleOnAxis();
+                              // Scroll up = zoom in, scroll down = zoom out
+                              final delta = event.scrollDelta.dy;
+                              double newScale;
+                              if (delta < 0) {
+                                // Scroll up - zoom in
+                                newScale = (currentScale * 1.1).clamp(1.0, 3.0);
+                              } else {
+                                // Scroll down - zoom out
+                                newScale = (currentScale / 1.1).clamp(1.0, 3.0);
+                              }
+                              if (newScale <= 1.05) {
+                                _zoomController.value = Matrix4.identity();
+                              } else {
+                                // Zoom from cursor position
+                                final focalPoint = event.localPosition;
+                                final scaleDiff = newScale / currentScale;
+
+                                // Get current translation
+                                final currentMatrix = _zoomController.value.clone();
+                                final currentTranslation = currentMatrix.getTranslation();
+
+                                // Calculate new translation to keep focal point stationary
+                                final newTx = focalPoint.dx * (1 - scaleDiff) + currentTranslation.x * scaleDiff;
+                                final newTy = focalPoint.dy * (1 - scaleDiff) + currentTranslation.y * scaleDiff;
+
+                                // Build matrix: translate then scale
+                                // Matrix4 with translation and scale combined
+                                _zoomController.value = Matrix4(
+                                  newScale, 0, 0, 0,
+                                  0, newScale, 0, 0,
+                                  0, 0, 1, 0,
+                                  newTx, newTy, 0, 1,
+                                );
+                              }
+                            }
+                          },
+                          child: GestureDetector(
+                            onDoubleTap: () {
+                              // Double-tap to reset zoom
+                              _zoomController.value = Matrix4.identity();
+                            },
+                            child: InteractiveViewer(
+                              transformationController: _zoomController,
+                              minScale: 1.0,
+                              maxScale: 3.0,
+                              // On mobile: only allow panning when zoomed, so swipe works
+                              // On desktop: always allow panning when zoomed
+                              panEnabled: _isZoomedIn,
+                              scaleEnabled: true,
+                              child: gridWidget,
+                            ),
+                          ),
+                        ),
+                        // Mobile only: show reset button when zoomed
+                        if (isMobile && _isZoomedIn)
+                          Positioned(
+                            bottom: 8,
+                            right: 8,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.7),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
+                                    onPressed: () {
+                                      final currentScale = _zoomController.value.getMaxScaleOnAxis();
+                                      if (currentScale < 3.0) {
+                                        final newScale = (currentScale * 1.5).clamp(1.0, 3.0);
+                                        _zoomController.value = Matrix4.diagonal3Values(newScale, newScale, 1.0);
+                                      }
+                                    },
+                                    tooltip: 'Zoom in',
+                                    padding: const EdgeInsets.all(8),
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.zoom_out, color: Colors.white, size: 20),
+                                    onPressed: () {
+                                      final currentScale = _zoomController.value.getMaxScaleOnAxis();
+                                      if (currentScale > 1.1) {
+                                        final newScale = (currentScale / 1.5).clamp(1.0, 3.0);
+                                        if (newScale <= 1.05) {
+                                          _zoomController.value = Matrix4.identity();
+                                        } else {
+                                          _zoomController.value = Matrix4.diagonal3Values(newScale, newScale, 1.0);
+                                        }
+                                      } else {
+                                        _zoomController.value = Matrix4.identity();
+                                      }
+                                    },
+                                    tooltip: 'Zoom out',
+                                    padding: const EdgeInsets.all(8),
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.fit_screen, color: Colors.white, size: 20),
+                                    onPressed: () {
+                                      _zoomController.value = Matrix4.identity();
+                                    },
+                                    tooltip: 'Reset zoom',
+                                    padding: const EdgeInsets.all(8),
+                                    constraints: const BoxConstraints(),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                       ],
                     );
                   },
                 ),
-              ),
               ),
             ),
           ],

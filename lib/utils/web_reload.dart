@@ -2,6 +2,34 @@
 import 'dart:html' as html;
 import 'dart:js' as js;
 
+/// Print the current page (fallback)
+void printWebPage() {
+  html.window.print();
+}
+
+/// Print board HTML in a new window
+void printBoardHtml(String htmlContent) {
+  // Escape the HTML content for JavaScript
+  final escapedHtml = htmlContent
+      .replaceAll('\\', '\\\\')
+      .replaceAll("'", "\\'")
+      .replaceAll('\n', '\\n')
+      .replaceAll('\r', '');
+
+  js.context.callMethod('eval', ['''
+    (function() {
+      var printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write('$escapedHtml');
+        printWindow.document.close();
+        setTimeout(function() {
+          printWindow.print();
+        }, 300);
+      }
+    })();
+  ''']);
+}
+
 /// Reload the web page with cache clearing for PWAs
 void reloadWebPage() {
   // Try to unregister service workers to force fresh load
