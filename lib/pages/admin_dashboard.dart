@@ -348,6 +348,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
       builder: (context) => _QuarterScoreDialog(
         quarter: quarter,
         existingScore: existingScore,
+        homeTeamName: _currentConfig?.homeTeamName ?? 'Home',
+        awayTeamName: _currentConfig?.awayTeamName ?? 'Away',
         onScoreSaved: () {
           _loadUsers(); // Reload data
           _showSnackBar('Quarter $quarter score updated');
@@ -2378,12 +2380,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
 class _QuarterScoreDialog extends StatefulWidget {
   final int quarter;
   final GameScoreModel existingScore;
+  final String homeTeamName;
+  final String awayTeamName;
   final VoidCallback onScoreSaved;
   final GameScoreService gameScoreService;
 
   const _QuarterScoreDialog({
     required this.quarter,
     required this.existingScore,
+    required this.homeTeamName,
+    required this.awayTeamName,
     required this.onScoreSaved,
     required this.gameScoreService,
   });
@@ -2524,9 +2530,9 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
                 if (isNarrow) ...[
                   TextFormField(
                     controller: _homeScoreController,
-                    decoration: const InputDecoration(
-                      labelText: 'Home Score',
-                      prefixIcon: Icon(Icons.home),
+                    decoration: InputDecoration(
+                      labelText: '${widget.homeTeamName} Score',
+                      prefixIcon: const Icon(Icons.home),
                     ),
                     keyboardType: TextInputType.number,
                     validator: (value) {
@@ -2544,9 +2550,9 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _awayScoreController,
-                    decoration: const InputDecoration(
-                      labelText: 'Away Score',
-                      prefixIcon: Icon(Icons.flight_takeoff),
+                    decoration: InputDecoration(
+                      labelText: '${widget.awayTeamName} Score',
+                      prefixIcon: const Icon(Icons.flight_takeoff),
                     ),
                     keyboardType: TextInputType.number,
                     validator: (value) {
@@ -2567,9 +2573,9 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
                       Expanded(
                         child: TextFormField(
                           controller: _homeScoreController,
-                          decoration: const InputDecoration(
-                            labelText: 'Home Score',
-                            prefixIcon: Icon(Icons.home),
+                          decoration: InputDecoration(
+                            labelText: '${widget.homeTeamName} Score',
+                            prefixIcon: const Icon(Icons.home),
                           ),
                           keyboardType: TextInputType.number,
                           validator: (value) {
@@ -2589,9 +2595,9 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
                       Expanded(
                         child: TextFormField(
                           controller: _awayScoreController,
-                          decoration: const InputDecoration(
-                            labelText: 'Away Score',
-                            prefixIcon: Icon(Icons.flight_takeoff),
+                          decoration: InputDecoration(
+                            labelText: '${widget.awayTeamName} Score',
+                            prefixIcon: const Icon(Icons.flight_takeoff),
                           ),
                           keyboardType: TextInputType.number,
                           validator: (value) {
@@ -2627,11 +2633,11 @@ class _QuarterScoreDialogState extends State<_QuarterScoreDialog> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Home: $homeScore (last digit: $homeDigit)',
+                        '${widget.homeTeamName}: $homeScore (last digit: $homeDigit)',
                         style: const TextStyle(fontSize: 14),
                       ),
                       Text(
-                        'Away: $awayScore (last digit: $awayDigit)',
+                        '${widget.awayTeamName}: $awayScore (last digit: $awayDigit)',
                         style: const TextStyle(fontSize: 14),
                       ),
                       const SizedBox(height: 8),
