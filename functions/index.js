@@ -328,7 +328,7 @@ exports.sendWinnerNotifications = onCall(async (request) => {
   }
 });
 
-// Send admin summary email when Q4 (final) scores are entered
+// Send admin payout summary email with all winners and consolidated totals
 exports.sendAdminSummary = onCall(async (request) => {
   try {
     // Get all admin users
@@ -484,7 +484,7 @@ exports.sendAdminSummary = onCall(async (request) => {
       }
     }
 
-    // Group winners by quarter for the email
+    // Group winners by quarter for the quarter-by-quarter breakdown
     const winnersByQuarter = {};
     for (const winner of allWinners) {
       if (!winnersByQuarter[winner.quarter]) {
@@ -496,7 +496,37 @@ exports.sendAdminSummary = onCall(async (request) => {
       winnersByQuarter[winner.quarter].winners.push(winner);
     }
 
-    // Build the email HTML
+    // Build consolidated totals per person across all quarters
+    const totalsByPerson = {};
+    for (const winner of allWinners) {
+      if (!totalsByPerson[winner.userName]) {
+        totalsByPerson[winner.userName] = { total: 0, details: [] };
+      }
+      totalsByPerson[winner.userName].total += winner.prize;
+      totalsByPerson[winner.userName].details.push({
+        quarter: winner.quarter,
+        type: winner.type,
+        prize: winner.prize,
+      });
+    }
+
+    // Sort by total winnings descending
+    const sortedPeople = Object.entries(totalsByPerson)
+      .sort((a, b) => b[1].total - a[1].total);
+
+    // Build the consolidated payout summary table
+    const payoutRows = sortedPeople.map(([name, data]) => {
+      const detailText = data.details
+        .map((d) => `${d.quarter} ${d.type}: $${d.prize}`)
+        .join(", ");
+      return `<tr>
+        <td style="padding: 10px 8px; border: 1px solid #ddd; font-weight: bold;">${name}</td>
+        <td style="padding: 10px 8px; border: 1px solid #ddd; font-size: 12px; color: #555;">${detailText}</td>
+        <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: right; font-weight: bold; font-size: 16px; color: #1a472a;">$${data.total}</td>
+      </tr>`;
+    }).join("");
+
+    // Build quarter-by-quarter breakdown sections
     let quarterSections = "";
     for (const quarter of Object.keys(winnersByQuarter)) {
       const qData = winnersByQuarter[quarter];
@@ -536,24 +566,49 @@ exports.sendAdminSummary = onCall(async (request) => {
       `;
     }
 
+    const uniqueWinnerCount = sortedPeople.length;
+    const moneySquareCount = allWinners.length;
+
     const mailOptions = {
       from: `"Super Bowl Squares" <${process.env.GMAIL_EMAIL}>`,
       to: adminEmails.join(", "),
-      subject: "Super Bowl Squares - 2026 Final Summary",
+      subject: "Super Bowl Squares 2026 Payout Summary",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto;">
           <div style="background: linear-gradient(135deg, #1a472a 0%, #228B22 100%); padding: 20px; text-align: center;">
-            <h1 style="color: #FFD700; margin: 0;">Super Bowl Squares - 2026</h1>
-            <p style="color: #fff; margin: 10px 0 0 0;">Game Summary Report</p>
+            <h1 style="color: #FFD700; margin: 0;">Super Bowl Squares 2026</h1>
+            <p style="color: #fff; margin: 10px 0 0 0;">Payout Summary</p>
           </div>
           <div style="padding: 30px; background: #f9f9f9;">
-            <div style="background: #FFD700; color: #1a472a; font-size: 24px; font-weight: bold; padding: 15px; text-align: center; border-radius: 10px; margin-bottom: 25px;">
-              38 Money Squares Awarded!
+            <div style="background: #FFD700; color: #1a472a; font-size: 20px; font-weight: bold; padding: 15px; text-align: center; border-radius: 10px; margin-bottom: 25px;">
+              ${moneySquareCount} Money Squares &bull; ${uniqueWinnerCount} Winners &bull; $${grandTotal} Total
             </div>
+
+            <h2 style="color: #1a472a; border-bottom: 2px solid #1a472a; padding-bottom: 8px;">Total Winnings by Person</h2>
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 30px;">
+              <thead>
+                <tr style="background: #1a472a; color: white;">
+                  <th style="padding: 10px 8px; text-align: left;">Name</th>
+                  <th style="padding: 10px 8px; text-align: left;">Breakdown</th>
+                  <th style="padding: 10px 8px; text-align: right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${payoutRows}
+              </tbody>
+              <tfoot>
+                <tr style="background: #FFD700; font-weight: bold; font-size: 16px;">
+                  <td colspan="2" style="padding: 10px 8px; border: 1px solid #ddd;">Grand Total</td>
+                  <td style="padding: 10px 8px; border: 1px solid #ddd; text-align: right;">$${grandTotal}</td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <h2 style="color: #1a472a; border-bottom: 2px solid #1a472a; padding-bottom: 8px;">Quarter-by-Quarter Breakdown</h2>
             ${quarterSections}
           </div>
           <div style="background: #1a472a; padding: 15px; text-align: center;">
-            <p style="color: #fff; margin: 0; font-size: 12px;">Super Bowl Squares - 2026 Game Complete</p>
+            <p style="color: #fff; margin: 0; font-size: 12px;">Super Bowl Squares 2026 - Game Complete</p>
           </div>
         </div>
       `,
@@ -563,20 +618,20 @@ exports.sendAdminSummary = onCall(async (request) => {
     try {
       await transporter.sendMail(mailOptions);
       emailsSent = adminEmails.length;
-      console.log(`Admin summary sent to ${adminEmails.join(", ")}`);
+      console.log(`Admin payout summary sent to ${adminEmails.join(", ")}`);
     } catch (emailError) {
-      console.error("Failed to send admin summary email:", emailError);
+      console.error("Failed to send admin payout summary email:", emailError);
     }
 
     return {
       success: true,
-      message: "Admin summary sent",
+      message: "Payout summary sent",
       emailsSent: emailsSent,
       grandTotal: grandTotal,
     };
   } catch (error) {
-    console.error("Error sending admin summary:", error);
-    throw new HttpsError("internal", "Failed to send admin summary");
+    console.error("Error sending admin payout summary:", error);
+    throw new HttpsError("internal", "Failed to send payout summary");
   }
 });
 

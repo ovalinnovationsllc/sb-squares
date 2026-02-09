@@ -438,6 +438,45 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  void _sendPayoutSummary() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send Payout Summary'),
+        content: const Text(
+          'This will email the "Super Bowl Squares 2026 Payout Summary" to all admins.\n\n'
+          'It includes total winnings per person and a quarter-by-quarter breakdown.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1a472a),
+              foregroundColor: const Color(0xFFFFD700),
+            ),
+            child: const Text('Send Email'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      _showSnackBar('Sending payout summary...');
+      final result = await _gameScoreService.sendAdminSummary();
+      if (result.success && result.emailsSent > 0) {
+        _showSnackBar('Payout summary sent to ${result.emailsSent} admin(s)');
+      } else if (result.success) {
+        _showSnackBar('No data to send - make sure scores are entered', isError: true);
+      } else {
+        _showSnackBar('Failed to send: ${result.message}', isError: true);
+      }
+    }
+  }
+
   Future<void> _logout() async {
     // Clear storage
     await PlatformStorage.remove('sb_squares_user');
@@ -1896,17 +1935,29 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: ElevatedButton.icon(
-                    onPressed: _clearAllQuarterScores,
-                    icon: const Icon(Icons.clear_all, size: 16),
-                    label: Text(MediaQuery.of(context).size.width > 600 ? 'Clear All Scores' : 'Clear Scores'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _errorColor,
-                      foregroundColor: _colorScheme.onError,
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _clearAllQuarterScores,
+                      icon: const Icon(Icons.clear_all, size: 16),
+                      label: Text(MediaQuery.of(context).size.width > 600 ? 'Clear All Scores' : 'Clear Scores'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _errorColor,
+                        foregroundColor: _colorScheme.onError,
+                      ),
                     ),
-                  ),
+                    ElevatedButton.icon(
+                      onPressed: _sendPayoutSummary,
+                      icon: const Icon(Icons.email_outlined, size: 16),
+                      label: Text(MediaQuery.of(context).size.width > 600 ? 'Send Payout Summary' : 'Payout Email'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1a472a),
+                        foregroundColor: const Color(0xFFFFD700),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
